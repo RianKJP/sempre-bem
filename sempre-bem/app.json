@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "sempre-bem",
+    "slug": "sempre-bem",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/logos/icon_inicio.png",
+    "backgroundColor": "#E8E4DC",
+    "scheme": "semprebem",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E8E4DC",
+        "foregroundImage": "./src/assets/logos/icon_inicio.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.anonymous.semprebem"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./src/assets/logos/icon_inicio.png",
+      "backgroundColor": "#E8E4DC"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./src/assets/logos/logo_sempre_bem.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#E8E4DC"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permita que o Sempre Bem use sua localização para preencher o endereço do atendimento."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
