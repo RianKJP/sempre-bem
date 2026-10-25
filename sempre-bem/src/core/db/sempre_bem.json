@@ -274,6 +274,48 @@
       "id_solicitacao": "6",
       "status": "CANCELADA",
       "id": "J2xy1sdQSOE"
+    },
+    {
+      "criado_em": "2026-10-16T22:29:36.926Z",
+      "data_hora_resposta": "2026-10-16T22:32:28.493Z",
+      "data_hora_solicitada": "2026-10-16T22:29:36.926Z",
+      "duracao_horas": 4,
+      "endereco_atendimento": "R. Bahia, 202 - Vila Rica, Sabará - MG, 34585-670, Brasil",
+      "id_cuidador": null,
+      "id_familia": "1",
+      "id_idoso": "2",
+      "id_solicitacao": "7",
+      "servico": "Auxílio com vestimenta",
+      "status": "CANCELADA",
+      "id": "QWFbUySndds"
+    },
+    {
+      "criado_em": "2026-10-20T00:14:16.019Z",
+      "data_hora_resposta": "2026-10-20T00:14:25.048Z",
+      "data_hora_solicitada": "2026-10-20T00:14:16.019Z",
+      "duracao_horas": 3,
+      "endereco_atendimento": "R. Bahia, 202 - Vila Rica, Sabará - MG, 34585-670, Brasil",
+      "id_cuidador": null,
+      "id_familia": "1",
+      "id_idoso": "2",
+      "id_solicitacao": "8",
+      "servico": "Auxiliar ao caminhar, Aferir sinais vitais, Administração de medicação",
+      "status": "CANCELADA",
+      "id": "Xiw6McnjXBY"
+    },
+    {
+      "criado_em": "2026-10-22T22:54:50.603Z",
+      "data_hora_resposta": "2026-10-22T22:54:58.667Z",
+      "data_hora_solicitada": "2026-10-22T22:54:50.603Z",
+      "duracao_horas": 3,
+      "endereco_atendimento": "R. Bahia, 202 - Vila Rica, Sabará - MG, 34585-670, Brasil",
+      "id_cuidador": null,
+      "id_familia": "1",
+      "id_idoso": "2",
+      "id_solicitacao": "9",
+      "servico": "Auxiliar ao caminhar, Cuidados com sonda",
+      "status": "CANCELADA",
+      "id": "wyfkz1VC8WM"
     }
   ],
   "atendimento": [
