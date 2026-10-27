@@ -4,9 +4,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { getRandomBytesAsync } from "expo-crypto";
 
 import { API_BASE_URL } from "@/core/config/api_config";
-import type { Availability } from "@/features/cadastro_profissional/state/availability";
-import { radiusInKm } from "@/features/cadastro_profissional/state/availability";
 import type { PersonalData } from "@/features/cadastro_profissional/state/draft";
+import type { ProfessionalData } from "@/features/cadastro_profissional/state/professional_draft";
 
 export type AuthProfile = "cliente" | "profissional";
 
@@ -25,8 +24,8 @@ export type ClientRegistration = {
 };
 
 export type ProfessionalRegistration = {
-    availability: Availability;
     personal: PersonalData;
+    professional: ProfessionalData;
 };
 
 type ApiAccount = {
@@ -242,22 +241,20 @@ export async function registerProfessional(input: ProfessionalRegistration) {
     }
 
     const createdAccount = await createAccount("profissional", {
-        cidade: input.personal.city.trim(),
         criado_em: new Date().toISOString(),
-        dias_disponiveis: input.availability.days,
         documentacao_validada: false,
         email,
-        endereco: input.personal.address.trim(),
         foto_uri: input.personal.photoUri,
         latitude: null,
         longitude: null,
         nome: input.personal.name.trim(),
-        periodos_disponiveis: input.availability.periods,
-        raio_atendimento_km: radiusInKm(input.availability.radius),
+        tipo_profissional: input.professional.type,
+        especialidades: input.professional.specialties,
+        tempo_experiencia: input.professional.experience.trim(),
+        formacao: input.professional.education.trim(),
+        descricao_profissional: input.professional.description.trim(),
         senha: await createPasswordHash(input.personal.password),
-        status_disponibilidade: input.availability.availableNow
-            ? "DISPONIVEL"
-            : "INDISPONIVEL",
+        status_disponibilidade: "INDISPONIVEL",
         telefone: input.personal.phone.replace(/\D/g, ""),
     });
     const account = await assignDomainId("profissional", createdAccount);

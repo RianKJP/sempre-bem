@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getCurrentLocation } from "@/core/service/location_service";
+import { buscarIdososDaFamilia } from "@/features/app_cliente/home/service/api_cliente";
 import {
     CAREGIVER_SERVICES,
     getProfessionalRecommendation,
@@ -17,15 +18,16 @@ const DEFAULT_COORDINATE = {
     latitude: -23.5898,
     longitude: -46.6346,
 };
-const CLIENT_FAMILY_ID = "1";
-
 export function useSolicitacaoViewModel() {
     const router = useRouter();
-    const { familiar = "Familiar", idosoId } = useLocalSearchParams<{
+    const { familiar = "Familiar", familiaId = "1", idosoId } = useLocalSearchParams<{
         familiar?: string;
+        familiaId?: string;
         idosoId?: string;
     }>();
     const [address, setAddress] = useState("");
+    const [selectedElderId, setSelectedElderId] = useState(idosoId ? String(idosoId) : "");
+    const [selectedElderName, setSelectedElderName] = useState(String(familiar));
     const [addressHelperText, setAddressHelperText] = useState("Buscando seu endereço atual...");
     const [coordinate, setCoordinate] = useState(DEFAULT_COORDINATE);
     const [hasCurrentLocation, setHasCurrentLocation] = useState(false);
@@ -88,6 +90,25 @@ export function useSolicitacaoViewModel() {
             isMounted = false;
         };
     }, []);
+
+    useEffect(() => {
+        if (idosoId) {
+            setSelectedElderId(String(idosoId));
+            setSelectedElderName(String(familiar));
+            return;
+        }
+
+        const controller = new AbortController();
+        void buscarIdososDaFamilia(String(familiaId), controller.signal)
+            .then((people) => {
+                if (people[0]) {
+                    setSelectedElderId(people[0].id_idoso);
+                    setSelectedElderName(people[0].nome);
+                }
+            })
+            .catch(() => undefined);
+        return () => controller.abort();
+    }, [familiaId, familiar, idosoId]);
 
     function changeAddress(value: string) {
         addressWasEdited.current = true;
@@ -157,8 +178,8 @@ export function useSolicitacaoViewModel() {
     }
 
     async function submitRequest() {
-        if (!idosoId) {
-            setSubmitError("Não foi possível identificar o familiar selecionado.");
+        if (!selectedElderId) {
+            setSubmitError("Cadastre ou selecione uma pessoa cuidada antes de iniciar a busca.");
             return false;
         }
 
@@ -173,8 +194,8 @@ export function useSolicitacaoViewModel() {
             const createdRequest = await criarSolicitacao({
                 duracaoHoras: duration,
                 enderecoAtendimento: address.trim(),
-                id_familia: CLIENT_FAMILY_ID,
-                id_idoso: String(idosoId),
+                id_familia: String(familiaId),
+                id_idoso: selectedElderId,
                 servico: [...selectedServices, ...customServices].join(", "),
             });
             setActiveRequestId(createdRequest.id);
@@ -238,7 +259,8 @@ export function useSolicitacaoViewModel() {
         customServices,
         details,
         duration,
-        familiar: String(familiar),
+        familiar: selectedElderName,
+        familiaId: String(familiaId),
         goBack: () => router.back(),
         hasCurrentLocation,
         isCancelling,

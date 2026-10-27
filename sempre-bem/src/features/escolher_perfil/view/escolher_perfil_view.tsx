@@ -16,7 +16,7 @@ const COLORS = {
 } as const;
 
 export default function EscolherPerfilView() {
-    const { openCliente, openCuidador } = useEscolherPerfilViewModel();
+    const { openCliente, openCuidador, openingProfile } = useEscolherPerfilViewModel();
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -45,6 +45,8 @@ export default function EscolherPerfilView() {
                         description={PROFILE_OPTIONS.cliente.description}
                         icon={{ ios: "person.2.fill", android: "group", web: "group" }}
                         label={PROFILE_OPTIONS.cliente.label}
+                        disabled={openingProfile !== undefined}
+                        loading={openingProfile === "cliente"}
                         onPress={openCliente}
                         tone="green"
                     />
@@ -52,6 +54,8 @@ export default function EscolherPerfilView() {
                         description={PROFILE_OPTIONS.cuidador.description}
                         icon={{ ios: "heart.fill", android: "favorite", web: "favorite" }}
                         label={PROFILE_OPTIONS.cuidador.label}
+                        disabled={openingProfile !== undefined}
+                        loading={openingProfile === "profissional"}
                         onPress={openCuidador}
                         tone="plum"
                     />

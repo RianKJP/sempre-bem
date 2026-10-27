@@ -9,6 +9,8 @@ import {
     type ViewStyle,
 } from "react-native";
 
+import { PasswordVisibilityButton } from "@/core/components/password_visibility_button";
+
 const COLORS = {
     border: "#DED5DA",
     error: "#EB5757",
@@ -24,6 +26,7 @@ export type InputProps = TextInputProps & {
     error?: string;
     helperText?: string;
     containerStyle?: StyleProp<ViewStyle>;
+    showPasswordToggle?: boolean;
     ref?: Ref<TextInput>;
 };
 
@@ -37,34 +40,47 @@ export function Input({
     onBlur,
     onFocus,
     placeholderTextColor = COLORS.placeholder,
+    secureTextEntry,
+    showPasswordToggle = false,
     ...rest
 }: InputProps) {
     const [isFocused, setIsFocused] = useState(false);
+    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
     return (
         <View style={[styles.container, containerStyle]}>
             {label ? <Text style={styles.label}>{label}</Text> : null}
 
-            <TextInput
-                multiline={multiline}
-                onBlur={(event) => {
-                    setIsFocused(false);
-                    onBlur?.(event);
-                }}
-                onFocus={(event) => {
-                    setIsFocused(true);
-                    onFocus?.(event);
-                }}
-                placeholderTextColor={placeholderTextColor}
-                style={[
-                    styles.input,
-                    multiline && styles.multiline,
-                    isFocused && styles.inputFocused,
-                    error && styles.inputError,
-                    style,
-                ]}
-                {...rest}
-            />
+            <View style={styles.inputWrapper}>
+                <TextInput
+                    multiline={multiline}
+                    onBlur={(event) => {
+                        setIsFocused(false);
+                        onBlur?.(event);
+                    }}
+                    onFocus={(event) => {
+                        setIsFocused(true);
+                        onFocus?.(event);
+                    }}
+                    placeholderTextColor={placeholderTextColor}
+                    secureTextEntry={showPasswordToggle ? !isPasswordVisible : secureTextEntry}
+                    style={[
+                        styles.input,
+                        multiline && styles.multiline,
+                        showPasswordToggle && styles.inputWithAction,
+                        isFocused && styles.inputFocused,
+                        error && styles.inputError,
+                        style,
+                    ]}
+                    {...rest}
+                />
+                {showPasswordToggle ? (
+                    <PasswordVisibilityButton
+                        onPress={() => setIsPasswordVisible((current) => !current)}
+                        visible={isPasswordVisible}
+                    />
+                ) : null}
+            </View>
 
             {error ? (
                 <Text style={styles.errorText}>{error}</Text>
@@ -85,6 +101,9 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         marginBottom: 8,
     },
+    inputWrapper: {
+        position: "relative",
+    },
     input: {
         width: "100%",
         minHeight: 54,
@@ -101,6 +120,9 @@ const styles = StyleSheet.create({
         minHeight: 112,
         paddingTop: 14,
         textAlignVertical: "top",
+    },
+    inputWithAction: {
+        paddingRight: 52,
     },
     inputFocused: {
         borderColor: COLORS.primary,

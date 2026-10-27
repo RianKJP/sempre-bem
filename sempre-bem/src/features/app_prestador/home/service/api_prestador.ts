@@ -10,6 +10,11 @@ export type PrestadorApi = {
     longitude: number | null;
     nome: string;
     senha: string;
+    tipo_profissional?: "CUIDADOR" | "ENFERMEIRO";
+    especialidades?: string[];
+    tempo_experiencia?: string;
+    formacao?: string;
+    descricao_profissional?: string;
     status_disponibilidade: "DISPONIVEL" | "EM_ATENDIMENTO" | "INDISPONIVEL";
 };
 

@@ -29,6 +29,7 @@ import {
     type CareService,
 } from "@/features/app_cliente/solicitacao/service/solicitacao_service";
 import { useSolicitacaoViewModel } from "@/features/app_cliente/solicitacao/viewmodels/use_solicitacao_view_model";
+import { ProfileBottomNav } from "@/features/perfil_cliente/components/profile_bottom_nav";
 
 // Paleta exclusiva da solicitação, alinhada visualmente à home do cliente.
 const COLORS = {
@@ -78,6 +79,7 @@ export default function SolicitacaoView() {
         details,
         duration,
         familiar,
+        familiaId,
         goBack,
         hasCurrentLocation,
         isCancelling,
@@ -638,6 +640,7 @@ export default function SolicitacaoView() {
                     </View>
                 </View>
             </Modal>
+            {!isSearching ? <ProfileBottomNav familiaId={familiaId} selected="Buscar" /> : null}
         </KeyboardAvoidingView>
     );
 }

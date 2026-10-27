@@ -28,11 +28,23 @@ export default function RootLayout() {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="cadastro-disponibilidade"
+                name="cadastro-profissional"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
                 name="perfil"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="conta"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="diario-bordo"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="atendimentos"
                 options={{ headerShown: false }}
             />
             <Stack.Screen

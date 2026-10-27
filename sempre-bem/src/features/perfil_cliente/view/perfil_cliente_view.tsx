@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useFonts } from 'expo-font';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ export default function PerfilClienteScreen() {
   const router = useRouter();
   const { familiaId: familiaIdParam } = useLocalSearchParams<{ familiaId?: string | string[] }>();
   const familiaId = Array.isArray(familiaIdParam) ? familiaIdParam[0] : familiaIdParam ?? '1';
-  const { profile, updateProfile } = useClienteProfile();
+  const { error, loading, profile, reload, updateProfile } = useClienteProfile(familiaId);
   const [editing, setEditing] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     'Poppins-Regular': require('@/assets/fonts/Poppins-Regular.ttf'),
@@ -22,10 +22,12 @@ export default function PerfilClienteScreen() {
     'Poppins-Bold': require('@/assets/fonts/Poppins-Bold.ttf'),
   });
   const unavailable = (title: string) => Alert.alert(title, 'Esta funcionalidade ainda não está integrada ao Perfil do Cliente.');
-  const signOut = () => router.replace({ pathname: '/login', params: { perfil: 'cliente' } });
+  const signOut = () => router.replace('/');
 
   if (fontError) throw fontError;
   if (!fontsLoaded) return <View style={styles.screen} />;
+  if (loading) return <View style={styles.state}><ActivityIndicator color="#713568" /><Text style={styles.stateText}>Carregando perfil...</Text></View>;
+  if (error || !profile) return <View style={styles.state}><Text style={styles.stateText}>{error ?? 'Perfil não encontrado.'}</Text><Pressable onPress={reload}><Text style={styles.retry}>Tentar novamente</Text></Pressable></View>;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -47,24 +49,24 @@ export default function PerfilClienteScreen() {
           <View style={styles.menu}>
             <ProfileMenuCard title="Minha conta" description="Dados pessoais e editar perfil" onPress={() => setEditing(true)} />
             <ProfileMenuCard title="Pessoas cuidadas" description="Gerenciar idosos" onPress={() => router.push('/pessoas-cuidadas')} />
-            <ProfileMenuCard title="Atendimentos" description="Histórico de cuidados" onPress={() => router.push({ pathname: '/historico_atendimentos', params: { familiaId } })} />
-            <ProfileMenuCard title="Configurações" description="Notificações e privacidade" onPress={() => unavailable('Configurações')} />
-            <ProfileMenuCard title="Conta" description="Sair ou excluir conta" onPress={() => Alert.alert('Conta', 'Não há autenticação ou exclusão de contas disponível nesta versão.', [{ text: 'Fechar', style: 'cancel' }, { text: 'Sair', onPress: signOut }])} />
+            <ProfileMenuCard title="Atendimentos" description="Histórico de cuidados" onPress={() => router.push({ pathname: '/atendimentos', params: { familiaId } })} />
+            <ProfileMenuCard title="Configurações" description="Conta, segurança e privacidade" onPress={() => router.push({ pathname: '/conta', params: { familiaId } })} />
+            <ProfileMenuCard title="Conta" description="Sair ou excluir conta" onPress={() => router.push({ pathname: '/conta', params: { familiaId } })} />
           </View>
           <Pressable accessibilityRole="button" onPress={signOut} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}><Text style={styles.signOutText}>Sair</Text></Pressable>
         </View>
       </ScrollView>
-      <ProfileBottomNav onSelect={label => {
-        if (label === 'Início') router.replace({ pathname: '/cliente', params: { familiaId } });
-        else if (label !== 'Perfil') unavailable(label);
-      }} />
-      {editing ? <EditProfileModal initialValue={profile} onClose={() => setEditing(false)} onSave={value => { updateProfile(value); setEditing(false); }} /> : null}
+      <ProfileBottomNav familiaId={familiaId} selected="Perfil" />
+      {editing ? <EditProfileModal initialValue={profile} onClose={() => setEditing(false)} onSave={async value => { try { await updateProfile(value); setEditing(false); } catch (failure) { Alert.alert('Não foi possível atualizar', failure instanceof Error ? failure.message : 'Tente novamente.'); } }} /> : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F8F5ED' },
+  state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, backgroundColor: '#F8F5ED' },
+  stateText: { fontFamily: 'Poppins-Regular', fontSize: 13, color: '#81767B', textAlign: 'center' },
+  retry: { fontFamily: 'Poppins-SemiBold', fontSize: 13, color: '#713568' },
   scroll: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 22, paddingBottom: 32 },
   content: { width: '100%', maxWidth: 398, alignSelf: 'center' },
   header: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10 },

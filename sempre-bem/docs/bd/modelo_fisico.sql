@@ -44,6 +44,12 @@ CREATE TABLE cuidador (
     email VARCHAR(150) NOT NULL UNIQUE,
     senha VARCHAR(255) NOT NULL,
 
+    tipo_profissional VARCHAR(30) NOT NULL,
+    especialidades JSON NOT NULL,
+    tempo_experiencia VARCHAR(60) NOT NULL,
+    formacao VARCHAR(150) NOT NULL,
+    descricao_profissional VARCHAR(600),
+
     latitude DECIMAL(10,8),
     longitude DECIMAL(11,8),
 

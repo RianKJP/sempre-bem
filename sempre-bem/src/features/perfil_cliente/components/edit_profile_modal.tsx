@@ -30,7 +30,7 @@ export function EditProfileModal({ initialValue, onSave, onClose }: Props) {
           <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.scroll}>
             <View style={styles.content}>
               <Text accessibilityRole="header" style={styles.title}>Minha conta</Text>
-              <Text style={styles.notice}>Edição demonstrativa. As alterações ficam apenas nesta tela e não são salvas ao reabrir o aplicativo.</Text>
+              <Text style={styles.notice}>As alterações serão salvas no perfil da família.</Text>
               <FormField cadastro ref={nameRef} label="Nome completo" value={draft.name} onChangeText={name => { setDraft(value => ({ ...value, name })); setErrors(value => ({ ...value, name: undefined })); }} error={errors.name} autoCapitalize="words" autoComplete="name" returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => emailRef.current?.focus()} />
               <FormField cadastro ref={emailRef} label="E-mail" value={draft.email} onChangeText={email => { setDraft(value => ({ ...value, email })); setErrors(value => ({ ...value, email: undefined })); }} error={errors.email} autoCapitalize="none" autoCorrect={false} autoComplete="email" keyboardType="email-address" returnKeyType="done" onSubmitEditing={save} />
               <PrimaryButton cadastro title="Aplicar alterações" onPress={save} />

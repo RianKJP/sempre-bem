@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FormField } from '@/core/components/form_field';
 import { PrimaryButton } from '@/core/components/primary_button';
+import { BRAZILIAN_PHONE_MAX_LENGTH, formatBrazilianPhone } from '@/core/utils/phone';
 import { AuthServiceError, registerClient } from '@/features/autenticacao/service/auth_service';
 
 type Field = 'name' | 'email' | 'phone' | 'password' | 'confirmation';
@@ -87,11 +88,12 @@ export default function CadastroScreen() {
             </View>
             <View style={styles.form}>
               {fields.map(({ key, label, placeholder }, index) => (
-                <FormField key={key} cadastro ref={input => { refs.current[key] = input; }} nativeID={`cadastro-${key}`} label={label} placeholder={placeholder} value={values[key]} onChangeText={value => update(key, value)} error={errors[key]}
+                <FormField key={key} cadastro ref={input => { refs.current[key] = input; }} nativeID={`cadastro-${key}`} label={label} placeholder={placeholder} value={values[key]} onChangeText={value => update(key, key === 'phone' ? formatBrazilianPhone(value) : value)} error={errors[key]}
                   keyboardType={key === 'email' ? 'email-address' : key === 'phone' ? 'phone-pad' : 'default'}
+                  maxLength={key === 'phone' ? BRAZILIAN_PHONE_MAX_LENGTH : undefined}
                   autoCapitalize={key === 'name' ? 'words' : 'none'} autoCorrect={false}
                   autoComplete={key === 'name' ? 'name' : key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'new-password'}
-                  secureTextEntry={key === 'password' || key === 'confirmation'}
+                  showPasswordToggle={key === 'password' || key === 'confirmation'}
                   returnKeyType={index === fields.length - 1 ? 'done' : 'next'} submitBehavior="submit"
                   onSubmitEditing={() => index === fields.length - 1 ? submit() : refs.current[fields[index + 1].key]?.focus()}
                 />

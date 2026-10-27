@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/core/components/button";
 import { Input } from "@/core/components/input";
 import { authenticate } from "@/features/autenticacao/service/auth_service";
+import { saveAuthenticatedAccount } from "@/features/autenticacao/service/auth_session_repository";
 
 type Profile = "cliente" | "profissional";
 
@@ -59,6 +60,9 @@ export default function LoginView() {
         setSubmitting(true);
         try {
             const account = await authenticate(profile, email, password);
+            await saveAuthenticatedAccount(account);
+            setSubmitting(false);
+
             if (account.profile === "cliente") {
                 router.replace({ pathname: "/cliente", params: { familiaId: account.userId } });
             } else {
@@ -66,7 +70,6 @@ export default function LoginView() {
             }
         } catch (error) {
             setFormError(error instanceof Error ? error.message : "Não foi possível entrar.");
-        } finally {
             setSubmitting(false);
         }
     }
@@ -148,7 +151,7 @@ export default function LoginView() {
                             placeholder="Sua senha"
                             ref={passwordRef}
                             returnKeyType="done"
-                            secureTextEntry
+                            showPasswordToggle
                             value={password}
                         />
                         {formError ? <Text accessibilityLiveRegion="polite" style={styles.formError}>{formError}</Text> : null}

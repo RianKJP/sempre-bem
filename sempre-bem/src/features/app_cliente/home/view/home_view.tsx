@@ -1,9 +1,10 @@
-import { SymbolView, type SymbolViewProps } from "expo-symbols";
+import { SymbolView } from "expo-symbols";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HomeBannerCarousel } from "@/features/app_cliente/home/components/home_banner_carousel";
 import { ProfessionalCard } from "@/features/app_cliente/home/components/home_professional_card";
+import { ProfileBottomNav } from "@/features/perfil_cliente/components/profile_bottom_nav";
 import {
     type HomeFamily,
     useHomeViewModel,
@@ -31,6 +32,7 @@ export default function HomeView() {
     const {
         closeFamilyPicker,
         familia,
+        familiaId,
         familiares,
         familyError,
         isFamilyPickerVisible,
@@ -190,25 +192,7 @@ export default function HomeView() {
                 )}
             </ScrollView>
 
-            <View
-                style={[
-                    styles.bottomNav,
-                    {
-                        height: 72 + insets.bottom,
-                        paddingBottom: Math.max(insets.bottom, 8),
-                    },
-                ]}
-            >
-                <HomeNavItem icon={{ ios: "house.fill", android: "home", web: "home" }} label="Início" active />
-                <HomeNavItem icon={{ ios: "magnifyingglass", android: "search", web: "search" }} label="Buscar" />
-                <HomeNavItem icon={{ ios: "map", android: "map", web: "map" }} label="Mapa" />
-                <HomeNavItem icon={{ ios: "bubble.left.fill", android: "chat_bubble", web: "chat_bubble" }} label="Mensagens" />
-                <HomeNavItem
-                    icon={{ ios: "person.fill", android: "person", web: "person" }}
-                    label="Perfil"
-                    onPress={openClientProfile}
-                />
-            </View>
+            <ProfileBottomNav familiaId={familiaId} selected="Início" />
 
             <Modal
                 animationType="fade"
@@ -288,26 +272,6 @@ export default function HomeView() {
     );
 }
 
-type HomeNavItemProps = {
-    active?: boolean;
-    icon: SymbolViewProps["name"];
-    label: string;
-    onPress?: () => void;
-};
-
-function HomeNavItem({ active = false, icon, label, onPress }: HomeNavItemProps) {
-    return (
-        <Pressable accessibilityRole="button" onPress={onPress} style={styles.navItem}>
-            <SymbolView
-                name={icon}
-                size={22}
-                tintColor={active ? COLORS.primary : COLORS.textMuted}
-            />
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
-        </Pressable>
-    );
-}
-
 function FamilyCareCard({ family, onSelect }: { family: HomeFamily; onSelect: () => void }) {
     return (
         <View style={styles.familyCard}>
@@ -364,10 +328,6 @@ const styles = StyleSheet.create({
     sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 12 },
     sectionAction: { color: COLORS.primary, fontSize: 12, fontWeight: "700" },
     emptyText: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, textAlign: "center", paddingVertical: 18 },
-    bottomNav: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", justifyContent: "space-around", alignItems: "center", backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border },
-    navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
-    navLabel: { color: COLORS.textMuted, fontSize: 10, fontWeight: "600" },
-    navLabelActive: { color: COLORS.primary, fontWeight: "800" },
     pressed: { opacity: 0.65 },
     modalRoot: { flex: 1, justifyContent: "flex-end", backgroundColor: COLORS.backdrop },
     modalCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 30 },

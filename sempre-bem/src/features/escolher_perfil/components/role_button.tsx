@@ -1,5 +1,5 @@
 import { SymbolView } from "expo-symbols";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 const COLORS = {
     greenDark: "#657522",
@@ -21,23 +21,28 @@ type RoleButtonProps = {
         android: "favorite" | "group";
         web: "favorite" | "group";
     };
+    disabled?: boolean;
     label: string;
-    onPress: () => void;
+    loading?: boolean;
+    onPress: () => void | Promise<void>;
     tone: "plum" | "green";
 };
 
-export function RoleButton({ description, icon, label, onPress, tone }: RoleButtonProps) {
+export function RoleButton({ description, disabled = false, icon, label, loading = false, onPress, tone }: RoleButtonProps) {
     const isPlum = tone === "plum";
 
     return (
         <Pressable
             accessibilityHint={description}
             accessibilityRole="button"
+            accessibilityState={{ busy: loading, disabled }}
+            disabled={disabled}
             onPress={onPress}
             style={({ pressed }) => [
                 styles.roleButton,
                 isPlum ? styles.roleButtonPlum : styles.roleButtonGreen,
                 pressed && styles.pressed,
+                disabled && styles.disabled,
             ]}
         >
             <View style={[styles.iconBox, isPlum ? styles.iconBoxPlum : styles.iconBoxGreen]}>
@@ -51,11 +56,15 @@ export function RoleButton({ description, icon, label, onPress, tone }: RoleButt
                 <Text style={styles.roleLabel}>{label}</Text>
                 <Text style={styles.roleDescription}>{description}</Text>
             </View>
-            <SymbolView
-                name={{ ios: "arrow.right", android: "arrow_forward", web: "arrow_forward" }}
-                size={23}
-                tintColor={isPlum ? COLORS.plum : COLORS.greenDark}
-            />
+            {loading ? (
+                <ActivityIndicator color={isPlum ? COLORS.plum : COLORS.greenDark} />
+            ) : (
+                <SymbolView
+                    name={{ ios: "arrow.right", android: "arrow_forward", web: "arrow_forward" }}
+                    size={23}
+                    tintColor={isPlum ? COLORS.plum : COLORS.greenDark}
+                />
+            )}
         </Pressable>
     );
 }
@@ -75,6 +84,7 @@ const styles = StyleSheet.create({
         borderColor: COLORS.greenBorder,
     },
     pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
+    disabled: { opacity: 0.65 },
     iconBox: {
         width: 56,
         height: 56,

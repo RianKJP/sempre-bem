@@ -245,9 +245,7 @@ export default function HomeView() {
                 ]}
             >
                 <BottomNavItem label="Início" active icon={{ ios: "house.fill", android: "home", web: "home" }} />
-                <BottomNavItem label="Agenda" icon={{ ios: "calendar", android: "calendar_month", web: "calendar_month" }} />
-                <BottomNavItem label="Atendimentos" icon={{ ios: "heart", android: "favorite_border", web: "favorite_border" }} />
-                <BottomNavItem label="Mensagens" icon={{ ios: "message", android: "chat_bubble_outline", web: "chat_bubble_outline" }} />
+                <BottomNavItem label="Atendimento" icon={{ ios: "heart", android: "favorite_border", web: "favorite_border" }} />
                 <BottomNavItem label="Perfil" icon={{ ios: "person", android: "person_outline", web: "person_outline" }} />
             </View>
         </SafeAreaView>

@@ -76,7 +76,9 @@ function mapearCuidadorParaHome(
         id: cuidador.id_cuidador,
         initials: criarIniciais(cuidador.nome),
         name: cuidador.nome,
-        role: "Profissional cuidador",
+        role: cuidador.tipo_profissional === "ENFERMEIRO"
+            ? "Profissional enfermeiro"
+            : "Profissional cuidador",
         status: "Disponível agora",
     };
 }
@@ -175,6 +177,7 @@ export function useHomeViewModel() {
         changeProfile: () => router.replace("/"),
         closeFamilyPicker: () => setIsFamilyPickerVisible(false),
         familia,
+        familiaId,
         familiares,
         familyError,
         isFamilyPickerVisible,

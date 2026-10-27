@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/core/components/primary_button';
 import { useClienteFonts } from '@/features/perfil_cliente/components/use_cliente_fonts';
 
-export type RegistrationStep = 1 | 2 | 3;
-type Props = { step: 1 | 3; children: ReactNode; buttonTitle: string; submitting?: boolean; onSubmit: () => void; onBack: () => void; onStep: (step: RegistrationStep) => void };
-const labels = ['Dados pessoais', 'Profissional', 'Disponibilidade'];
+export type RegistrationStep = 1 | 2;
+type Props = { step: RegistrationStep; children: ReactNode; buttonTitle: string; submitting?: boolean; onSubmit: () => void; onBack: () => void; onStep: (step: RegistrationStep) => void };
+const labels = ['Dados pessoais', 'Profissional'];
 
 export function RegistrationLayout({ step, children, buttonTitle, submitting = false, onSubmit, onBack, onStep }: Props) {
   const loaded = useClienteFonts();
@@ -21,7 +21,7 @@ export function RegistrationLayout({ step, children, buttonTitle, submitting = f
             <View style={styles.heading}><Text accessibilityRole="header" style={styles.title}>Quero cuidar</Text><Text style={styles.subtitle}>Crie seu perfil profissional</Text></View>
           </View>
           <View accessibilityRole="tablist" style={styles.steps}>{labels.map((label, index) => <Pressable key={label} accessibilityRole="tab" accessibilityState={{ selected: step === index + 1 }} onPress={() => onStep((index + 1) as RegistrationStep)} hitSlop={{ top: 5, bottom: 5 }} style={({ pressed }) => [styles.step, index < step && styles.stepActive, pressed && styles.pressed]}><Text style={[styles.stepText, index < step && styles.stepTextActive]}>{label}</Text></Pressable>)}</View>
-          <Text style={styles.progress}>{step} de 3</Text>
+          <Text style={styles.progress}>{step} de 2</Text>
           {children}
         </View>
       </ScrollView>

@@ -4,6 +4,9 @@ export const CLIENT_API_ENDPOINTS = {
     atendimentos: `${API_BASE_URL}/atendimento`,
     avaliacoes: `${API_BASE_URL}/avaliacao`,
     cuidadores: `${API_BASE_URL}/cuidador`,
+    diarios: `${API_BASE_URL}/diario_bordo`,
+    diario: (diarioId: string) =>
+        `${API_BASE_URL}/diario_bordo/${encodeURIComponent(diarioId)}`,
     familia: (familiaId: string) =>
         `${API_BASE_URL}/familia/${encodeURIComponent(familiaId)}`,
     idososDaFamilia: (familiaId: string) => {
