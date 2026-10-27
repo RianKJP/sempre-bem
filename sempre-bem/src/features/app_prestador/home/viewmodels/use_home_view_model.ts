@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 
 import {
@@ -8,10 +8,10 @@ import {
     type PrestadorApi,
 } from "@/features/app_prestador/home/service/api_prestador";
 
-const HOME_PROVIDER_ID = "1";
-
 export function useHomeViewModel() {
     const router = useRouter();
+    const { prestadorId: prestadorIdParam } = useLocalSearchParams<{ prestadorId?: string | string[] }>();
+    const prestadorId = Array.isArray(prestadorIdParam) ? prestadorIdParam[0] : prestadorIdParam ?? "1";
     const [prestador, setPrestador] = useState<PrestadorApi | null>(null);
     const [currentCall, setCurrentCall] = useState<ChamadoAtualPrestador | null>(null);
     const [isLoadingProvider, setIsLoadingProvider] = useState(true);
@@ -25,7 +25,7 @@ export function useHomeViewModel() {
         setIsLoadingProvider(true);
         setProviderError(undefined);
 
-        buscarDadosHomePrestador(HOME_PROVIDER_ID, controller.signal)
+        buscarDadosHomePrestador(prestadorId, controller.signal)
             .then(({ chamadoAtual, prestador: loadedProvider }) => {
                 setCurrentCall(chamadoAtual);
                 setPrestador(loadedProvider);
@@ -46,7 +46,7 @@ export function useHomeViewModel() {
             });
 
         return () => controller.abort();
-    }, [reloadKey]);
+    }, [prestadorId, reloadKey]);
 
     const isAvailable = prestador?.status_disponibilidade === "DISPONIVEL";
 

@@ -29,7 +29,6 @@ const COLORS = {
 export default function HomeView() {
     const insets = useSafeAreaInsets();
     const {
-        changeProfile,
         closeFamilyPicker,
         familia,
         familiares,
@@ -38,6 +37,7 @@ export default function HomeView() {
         isLoadingFamily,
         isLoadingProfessionals,
         openClientHistory,
+        openClientProfile,
         openFamilyPicker,
         reloadFamily,
         profissionais,
@@ -95,8 +95,8 @@ export default function HomeView() {
                             />
                         </Pressable>
                         <Pressable
-                            accessibilityLabel="Trocar perfil"
-                            onPress={changeProfile}
+                            accessibilityLabel="Abrir perfil"
+                            onPress={openClientProfile}
                             style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
                         >
                             <Text style={styles.avatarText}>{iniciaisFamilia}</Text>
@@ -203,7 +203,11 @@ export default function HomeView() {
                 <HomeNavItem icon={{ ios: "magnifyingglass", android: "search", web: "search" }} label="Buscar" />
                 <HomeNavItem icon={{ ios: "map", android: "map", web: "map" }} label="Mapa" />
                 <HomeNavItem icon={{ ios: "bubble.left.fill", android: "chat_bubble", web: "chat_bubble" }} label="Mensagens" />
-                <HomeNavItem icon={{ ios: "person.fill", android: "person", web: "person" }} label="Perfil" />
+                <HomeNavItem
+                    icon={{ ios: "person.fill", android: "person", web: "person" }}
+                    label="Perfil"
+                    onPress={openClientProfile}
+                />
             </View>
 
             <Modal
@@ -288,11 +292,12 @@ type HomeNavItemProps = {
     active?: boolean;
     icon: SymbolViewProps["name"];
     label: string;
+    onPress?: () => void;
 };
 
-function HomeNavItem({ active = false, icon, label }: HomeNavItemProps) {
+function HomeNavItem({ active = false, icon, label, onPress }: HomeNavItemProps) {
     return (
-        <Pressable accessibilityRole="button" style={styles.navItem}>
+        <Pressable accessibilityRole="button" onPress={onPress} style={styles.navItem}>
             <SymbolView
                 name={icon}
                 size={22}

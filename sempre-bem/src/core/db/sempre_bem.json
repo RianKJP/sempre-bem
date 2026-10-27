@@ -1,20 +1,13 @@
 {
   "familia": [
     {
-      "id": "1",
-      "id_familia": "1",
-      "nome": "Rian Santos",
-      "email": "rian.santos@example.com",
-      "senha": "$2b$10$mock.familia.rian",
-      "criado_em": "2026-08-15T09:00:00-03:00"
-    },
-    {
-      "id": "2",
-      "id_familia": "2",
-      "nome": "Ana Rodrigues",
-      "email": "ana.rodrigues@example.com",
-      "senha": "$2b$10$mock.familia.ana",
-      "criado_em": "2026-09-02T14:30:00-03:00"
+      "criado_em": "2026-10-25T19:16:27.142Z",
+      "email": "rianjmw04@gmail.com",
+      "nome": "Rian Keven",
+      "senha": "pbkdf2_sha256$210000$a2801181c568eb65bbc6b94e858c075f$ecc6b62a5de703b71027960faba6386b27064d8e840d156297fdde91553bc86b",
+      "telefone": "31983422954",
+      "id": "t4DpKdF3Ni8",
+      "id_familia": "t4DpKdF3Ni8"
     }
   ],
   "idoso": [
@@ -43,44 +36,7 @@
       "observacoes": null
     }
   ],
-  "cuidador": [
-    {
-      "id": "1",
-      "id_cuidador": "1",
-      "nome": "Mariana Silva",
-      "email": "mariana.silva@example.com",
-      "senha": "$2b$10$mock.cuidador.mariana",
-      "latitude": -23.58741612,
-      "longitude": -46.65763321,
-      "documentacao_validada": true,
-      "status_disponibilidade": "DISPONIVEL",
-      "criado_em": "2026-07-10T08:15:00-03:00"
-    },
-    {
-      "id": "2",
-      "id_cuidador": "2",
-      "nome": "João Pereira",
-      "email": "joao.pereira@example.com",
-      "senha": "$2b$10$mock.cuidador.joao",
-      "latitude": -23.57492143,
-      "longitude": -46.64583211,
-      "documentacao_validada": true,
-      "status_disponibilidade": "EM_ATENDIMENTO",
-      "criado_em": "2026-07-18T10:45:00-03:00"
-    },
-    {
-      "id": "3",
-      "id_cuidador": "3",
-      "nome": "Ana Paula Lima",
-      "email": "ana.lima@example.com",
-      "senha": "$2b$10$mock.cuidador.ana",
-      "latitude": -23.60118832,
-      "longitude": -46.66590218,
-      "documentacao_validada": false,
-      "status_disponibilidade": "INDISPONIVEL",
-      "criado_em": "2026-09-20T16:20:00-03:00"
-    }
-  ],
+  "cuidador": [],
   "documentacao": [
     {
       "id": "1",

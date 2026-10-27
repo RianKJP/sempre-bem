@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import {
     StyleSheet,
     Text,
@@ -24,6 +24,7 @@ export type InputProps = TextInputProps & {
     error?: string;
     helperText?: string;
     containerStyle?: StyleProp<ViewStyle>;
+    ref?: Ref<TextInput>;
 };
 
 export function Input({

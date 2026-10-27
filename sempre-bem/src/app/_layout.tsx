@@ -16,6 +16,34 @@ export default function RootLayout() {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
+                name="login"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="cadastro"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="cadastro-dados"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="cadastro-disponibilidade"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="perfil"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="pessoas-cuidadas"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="pessoa-cuidada"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
                 name="solicitacao"
                 options={{ headerShown: false }}
             />

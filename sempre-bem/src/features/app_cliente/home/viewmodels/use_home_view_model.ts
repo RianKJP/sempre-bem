@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -9,7 +9,6 @@ import {
     type IdosoApi,
 } from "@/features/app_cliente/home/service/api_cliente";
 
-const HOME_FAMILY_ID = "1";
 const FAMILY_COLORS = ["#E8C7A6", "#DDE8B8", "#C9DCEB", "#E7D3EB"];
 const PROFESSIONAL_COLORS = ["#E8C7A6", "#C9DCEB", "#DDE8B8", "#E7D3EB"];
 
@@ -84,6 +83,8 @@ function mapearCuidadorParaHome(
 
 export function useHomeViewModel() {
     const router = useRouter();
+    const { familiaId: familiaIdParam } = useLocalSearchParams<{ familiaId?: string | string[] }>();
+    const familiaId = Array.isArray(familiaIdParam) ? familiaIdParam[0] : familiaIdParam ?? "1";
     const [familia, setFamilia] = useState<FamiliaApi | null>(null);
     const [idosos, setIdosos] = useState<IdosoApi[]>([]);
     const [cuidadores, setCuidadores] = useState<CuidadorApi[]>([]);
@@ -101,7 +102,7 @@ export function useHomeViewModel() {
         setIsLoadingFamily(true);
         setFamilyError(null);
 
-        buscarFamiliaComIdosos(HOME_FAMILY_ID, controller.signal)
+        buscarFamiliaComIdosos(familiaId, controller.signal)
             .then((response) => {
                 setFamilia(response.familia);
                 setIdosos(response.idosos);
@@ -122,7 +123,7 @@ export function useHomeViewModel() {
             });
 
         return () => controller.abort();
-    }, [reloadKey]);
+    }, [familiaId, reloadKey]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -182,8 +183,9 @@ export function useHomeViewModel() {
         openClientHistory: () =>
             router.push({
                 pathname: "/historico_atendimentos",
-                params: { familiaId: HOME_FAMILY_ID },
+                params: { familiaId },
             }),
+        openClientProfile: () => router.push({ pathname: "/perfil", params: { familiaId } }),
         openFamilyPicker: () => setIsFamilyPickerVisible(true),
         reloadFamily: () => setReloadKey((current) => current + 1),
         profissionais,
