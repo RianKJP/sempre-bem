@@ -8,7 +8,6 @@ import {
     listClientDiaryEntries,
     type ClientDiaryEntry,
 } from "@/features/app_cliente/diario_bordo/service/diario_bordo_service";
-import { ProfileBottomNav } from "@/features/perfil_cliente/components/profile_bottom_nav";
 import { useClienteFonts } from "@/features/perfil_cliente/components/use_cliente_fonts";
 
 export default function DiarioBordoView() {
@@ -89,7 +88,6 @@ export default function DiarioBordoView() {
                     </View>
                 )}
             </ScrollView>
-            <ProfileBottomNav familiaId={familiaId} selected="Diário" />
         </SafeAreaView>
     );
 }

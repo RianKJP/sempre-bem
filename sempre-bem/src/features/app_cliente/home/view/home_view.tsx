@@ -1,10 +1,10 @@
 import { SymbolView } from "expo-symbols";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HomeBannerCarousel } from "@/features/app_cliente/home/components/home_banner_carousel";
 import { ProfessionalCard } from "@/features/app_cliente/home/components/home_professional_card";
-import { ProfileBottomNav } from "@/features/perfil_cliente/components/profile_bottom_nav";
 import {
     type HomeFamily,
     useHomeViewModel,
@@ -38,13 +38,15 @@ export default function HomeView() {
         isFamilyPickerVisible,
         isLoadingFamily,
         isLoadingProfessionals,
-        openClientHistory,
         openClientProfile,
+        openCaredPersonRegistration,
         openFamilyPicker,
+        pendingRequest,
         reloadFamily,
         profissionais,
         professionalsError,
         reloadProfessionals,
+        resumePendingRequest,
         selectFamily,
     } = useHomeViewModel();
 
@@ -65,7 +67,7 @@ export default function HomeView() {
                 bounces={false}
                 contentContainerStyle={[
                     styles.content,
-                    { paddingBottom: 104 + insets.bottom },
+                    pendingRequest && styles.contentWithPendingRequest,
                 ]}
                 overScrollMode="never"
                 showsVerticalScrollIndicator={false}
@@ -147,19 +149,6 @@ export default function HomeView() {
                     </View>
                 )}
 
-                <Pressable
-                    accessibilityRole="button"
-                    onPress={openClientHistory}
-                    style={({ pressed }) => [styles.debugButton, pressed && styles.pressed]}
-                >
-                    <SymbolView
-                        name={{ ios: "ladybug.fill", android: "bug_report", web: "bug_report" }}
-                        size={15}
-                        tintColor={COLORS.primary}
-                    />
-                    <Text style={styles.debugButtonText}>DEBUG: abrir histórico do cliente</Text>
-                </Pressable>
-
                 <HomeBannerCarousel />
 
                 <View style={styles.sectionHeader}>
@@ -192,7 +181,9 @@ export default function HomeView() {
                 )}
             </ScrollView>
 
-            <ProfileBottomNav familiaId={familiaId} selected="Início" />
+            {pendingRequest ? (
+                <PendingRequestFloatingCard onPress={resumePendingRequest} />
+            ) : null}
 
             <Modal
                 animationType="fade"
@@ -257,7 +248,11 @@ export default function HomeView() {
                             ))}
                         </View>
 
-                        <Pressable style={styles.addFamilyButton}>
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={openCaredPersonRegistration}
+                            style={({ pressed }) => [styles.addFamilyButton, pressed && styles.pressed]}
+                        >
                             <SymbolView
                                 name={{ ios: "person.badge.plus", android: "person_add", web: "person_add" }}
                                 size={20}
@@ -269,6 +264,69 @@ export default function HomeView() {
                 </View>
             </Modal>
         </SafeAreaView>
+    );
+}
+
+function PendingRequestFloatingCard({ onPress }: { onPress: () => void }) {
+    const translateY = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        const animation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(translateY, {
+                    duration: 1100,
+                    toValue: -5,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(translateY, {
+                    duration: 1100,
+                    toValue: 0,
+                    useNativeDriver: true,
+                }),
+            ]),
+        );
+
+        animation.start();
+        return () => {
+            animation.stop();
+            translateY.setValue(0);
+        };
+    }, [translateY]);
+
+    return (
+        <Animated.View
+            pointerEvents="box-none"
+            style={[styles.pendingRequestWrapper, { transform: [{ translateY }] }]}
+        >
+            <Pressable
+                accessibilityLabel="Voltar ao chamado pendente"
+                accessibilityRole="button"
+                onPress={onPress}
+                style={({ pressed }) => [styles.pendingRequestCard, pressed && styles.pressed]}
+            >
+                <View style={styles.pendingRequestIcon}>
+                    <SymbolView
+                        name={{ ios: "wave.3.right", android: "radar", web: "radar" }}
+                        size={24}
+                        tintColor={COLORS.white}
+                    />
+                </View>
+                <View style={styles.pendingRequestCopy}>
+                    <Text style={styles.pendingRequestTitle}>Chamado em andamento</Text>
+                    <Text numberOfLines={1} style={styles.pendingRequestDescription}>
+                        Buscando um prestador disponível
+                    </Text>
+                </View>
+                <View style={styles.pendingRequestAction}>
+                    <Text style={styles.pendingRequestActionText}>Retornar</Text>
+                    <SymbolView
+                        name={{ ios: "chevron.right", android: "chevron_right", web: "chevron_right" }}
+                        size={16}
+                        tintColor={COLORS.primary}
+                    />
+                </View>
+            </Pressable>
+        </Animated.View>
     );
 }
 
@@ -294,7 +352,8 @@ function FamilyCareCard({ family, onSelect }: { family: HomeFamily; onSelect: ()
 
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
-    content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 104 },
+    content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 },
+    contentWithPendingRequest: { paddingBottom: 118 },
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 26 },
     headerCopy: { flex: 1, paddingRight: 12 },
     greeting: { color: COLORS.text, fontSize: 22, lineHeight: 27, fontWeight: "800" },
@@ -323,8 +382,6 @@ const styles = StyleSheet.create({
     selectFamilyText: { color: COLORS.white, fontSize: 9, fontWeight: "800" },
     addFamilyCard: { flex: 0.72, minWidth: 0, minHeight: 174, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.borderMuted, alignItems: "center", justifyContent: "center", gap: 6 },
     addFamilyLabel: { color: COLORS.text, fontSize: 10 },
-    debugButton: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.primary, borderRadius: 9, marginTop: 16 },
-    debugButtonText: { color: COLORS.primary, fontSize: 9, fontWeight: "800" },
     sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 12 },
     sectionAction: { color: COLORS.primary, fontSize: 12, fontWeight: "700" },
     emptyText: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, textAlign: "center", paddingVertical: 18 },
@@ -344,4 +401,12 @@ const styles = StyleSheet.create({
     familyRelation: { color: COLORS.textMuted, fontSize: 12, marginTop: 3 },
     addFamilyButton: { height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, backgroundColor: COLORS.primary, borderRadius: 14 },
     addFamilyText: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
+    pendingRequestWrapper: { position: "absolute", left: 14, right: 14, bottom: 12 },
+    pendingRequestCard: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 19, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 10, elevation: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.25, shadowRadius: 9 },
+    pendingRequestIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "rgba(255, 255, 255, 0.17)" },
+    pendingRequestCopy: { flex: 1, minWidth: 0 },
+    pendingRequestTitle: { color: COLORS.white, fontSize: 13, fontWeight: "800" },
+    pendingRequestDescription: { color: "rgba(255, 255, 255, 0.78)", fontSize: 10, lineHeight: 14, marginTop: 3 },
+    pendingRequestAction: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 2, borderRadius: 10, backgroundColor: COLORS.white, paddingHorizontal: 10 },
+    pendingRequestActionText: { color: COLORS.primary, fontSize: 10, lineHeight: 12, fontWeight: "800", textAlign: "center" },
 });

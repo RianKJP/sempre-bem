@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CLIENT_API_ENDPOINTS } from "@/features/app_cliente/config/api_config";
 import { clearAuthenticatedAccount } from "@/features/autenticacao/service/auth_session_repository";
 import { EditProfileModal } from "@/features/perfil_cliente/components/edit_profile_modal";
-import { ProfileBottomNav } from "@/features/perfil_cliente/components/profile_bottom_nav";
 import { useClienteFonts } from "@/features/perfil_cliente/components/use_cliente_fonts";
 import { useClienteProfile } from "@/features/perfil_cliente/state/profile";
 
@@ -105,7 +104,6 @@ export default function ContaClienteView() {
                 <ActionCard title="Sair da conta" description="Voltar à escolha entre cliente e prestador" onPress={signOut} />
                 <ActionCard danger title="Excluir conta" description="Remover permanentemente este cadastro" onPress={removeAccount} />
             </ScrollView>
-            <ProfileBottomNav familiaId={familiaId} selected="Perfil" />
             {editing ? <EditProfileModal initialValue={profile} onClose={() => setEditing(false)} onSave={async (value) => { try { await updateProfile(value); setEditing(false); } catch (failure) { Alert.alert("Não foi possível atualizar", failure instanceof Error ? failure.message : "Tente novamente."); } }} /> : null}
         </SafeAreaView>
     );

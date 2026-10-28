@@ -16,6 +16,7 @@ export type IdosoApi = {
     id_idoso: string;
     nome: string;
     observacoes: string | null;
+    relacao?: string | null;
 };
 
 export type CuidadorApi = {
@@ -34,6 +35,7 @@ export type CuidadorApi = {
     formacao?: string;
     descricao_profissional?: string;
     status_disponibilidade: "DISPONIVEL" | "EM_ATENDIMENTO" | "INDISPONIVEL";
+    valor_hora?: number | null;
 };
 
 export type FamiliaComIdosos = {
@@ -61,13 +63,38 @@ export function buscarFamilia(
     );
 }
 
-export function buscarIdososDaFamilia(
+export async function buscarIdososDaFamilia(
     familiaId: string,
     signal?: AbortSignal,
 ): Promise<IdosoApi[]> {
-    return buscarJson<IdosoApi[]>(
-        CLIENT_API_ENDPOINTS.idososDaFamilia(familiaId),
-        signal,
+    let idosos: IdosoApi[] | undefined;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            idosos = await buscarJson<IdosoApi[]>(
+                CLIENT_API_ENDPOINTS.idosos,
+                signal,
+            );
+            break;
+        } catch (error) {
+            if (signal?.aborted) throw error;
+            lastError = error;
+
+            if (attempt < 2) {
+                await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+            }
+        }
+    }
+
+    if (!idosos) {
+        throw lastError instanceof Error
+            ? lastError
+            : new Error("Não foi possível carregar as pessoas cuidadas.");
+    }
+
+    return idosos.filter(
+        (idoso) => String(idoso.id_familia) === String(familiaId),
     );
 }
 
@@ -92,8 +119,16 @@ export async function buscarCuidadoresDisponiveis(
     );
 
     return cuidadores.filter(
-        (cuidador) =>
-            cuidador.documentacao_validada &&
-            cuidador.status_disponibilidade === "DISPONIVEL",
+        (cuidador) => cuidador.status_disponibilidade === "DISPONIVEL",
+    );
+}
+
+export function buscarCuidador(
+    cuidadorId: string,
+    signal?: AbortSignal,
+): Promise<CuidadorApi> {
+    return buscarJson<CuidadorApi>(
+        CLIENT_API_ENDPOINTS.cuidador(cuidadorId),
+        signal,
     );
 }

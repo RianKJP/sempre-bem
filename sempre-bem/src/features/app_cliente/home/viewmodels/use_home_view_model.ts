@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 
 import {
     buscarCuidadoresDisponiveis,
@@ -8,6 +8,10 @@ import {
     type FamiliaApi,
     type IdosoApi,
 } from "@/features/app_cliente/home/service/api_cliente";
+import {
+    buscarSolicitacaoPendenteDaFamilia,
+    type SolicitacaoAtendimentoApi,
+} from "@/features/app_cliente/solicitacao/service/api_solicitacao";
 
 const FAMILY_COLORS = ["#E8C7A6", "#DDE8B8", "#C9DCEB", "#E7D3EB"];
 const PROFESSIONAL_COLORS = ["#E8C7A6", "#C9DCEB", "#DDE8B8", "#E7D3EB"];
@@ -27,6 +31,7 @@ export type HomeProfessional = {
     id: string;
     initials: string;
     name: string;
+    priceLabel: string;
     role: string;
     status: string;
 };
@@ -63,7 +68,7 @@ function mapearIdosoParaHome(idoso: IdosoApi, index: number): HomeFamily {
         id: idoso.id_idoso,
         initials: criarIniciais(idoso.nome),
         name: idoso.nome,
-        relation: "Pessoa idosa",
+        relation: idoso.relacao || "Pessoa idosa",
     };
 }
 
@@ -76,6 +81,13 @@ function mapearCuidadorParaHome(
         id: cuidador.id_cuidador,
         initials: criarIniciais(cuidador.nome),
         name: cuidador.nome,
+        priceLabel: cuidador.valor_hora && cuidador.valor_hora > 0
+            ? new Intl.NumberFormat("pt-BR", {
+                currency: "BRL",
+                minimumFractionDigits: 2,
+                style: "currency",
+            }).format(cuidador.valor_hora)
+            : "A combinar",
         role: cuidador.tipo_profissional === "ENFERMEIRO"
             ? "Profissional enfermeiro"
             : "Profissional cuidador",
@@ -97,8 +109,9 @@ export function useHomeViewModel() {
     const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
     const [professionalsError, setProfessionalsError] = useState<string | null>(null);
     const [professionalsReloadKey, setProfessionalsReloadKey] = useState(0);
+    const [pendingRequest, setPendingRequest] = useState<SolicitacaoAtendimentoApi | null>(null);
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         const controller = new AbortController();
 
         setIsLoadingFamily(true);
@@ -125,9 +138,9 @@ export function useHomeViewModel() {
             });
 
         return () => controller.abort();
-    }, [familiaId, reloadKey]);
+    }, [familiaId, reloadKey]));
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         const controller = new AbortController();
 
         setIsLoadingProfessionals(true);
@@ -151,7 +164,20 @@ export function useHomeViewModel() {
             });
 
         return () => controller.abort();
-    }, [professionalsReloadKey]);
+    }, [professionalsReloadKey]));
+
+    useFocusEffect(useCallback(() => {
+        const controller = new AbortController();
+
+        buscarSolicitacaoPendenteDaFamilia(familiaId, controller.signal)
+            .then(setPendingRequest)
+            .catch((error: unknown) => {
+                if (error instanceof Error && error.name === "AbortError") return;
+                setPendingRequest(null);
+            });
+
+        return () => controller.abort();
+    }, [familiaId]));
 
     const familiares = useMemo(
         () => idosos.map(mapearIdosoParaHome),
@@ -173,6 +199,24 @@ export function useHomeViewModel() {
         });
     }
 
+    function resumePendingRequest() {
+        if (!pendingRequest) return;
+
+        const caredPerson = idosos.find(
+            (person) => String(person.id_idoso) === String(pendingRequest.id_idoso),
+        );
+
+        router.push({
+            pathname: "/solicitacao",
+            params: {
+                familiaId,
+                familiar: caredPerson?.nome ?? "Pessoa cuidada",
+                idosoId: pendingRequest.id_idoso,
+                solicitacaoId: pendingRequest.id,
+            },
+        });
+    }
+
     return {
         changeProfile: () => router.replace("/"),
         closeFamilyPicker: () => setIsFamilyPickerVisible(false),
@@ -183,18 +227,22 @@ export function useHomeViewModel() {
         isFamilyPickerVisible,
         isLoadingFamily,
         isLoadingProfessionals,
-        openClientHistory: () =>
-            router.push({
-                pathname: "/historico_atendimentos",
-                params: { familiaId },
-            }),
         openClientProfile: () => router.push({ pathname: "/perfil", params: { familiaId } }),
+        openCaredPersonRegistration: () => {
+            setIsFamilyPickerVisible(false);
+            router.push({
+                pathname: "/pessoas-cuidadas",
+                params: { familiaId, novo: "1" },
+            });
+        },
         openFamilyPicker: () => setIsFamilyPickerVisible(true),
+        pendingRequest,
         reloadFamily: () => setReloadKey((current) => current + 1),
         profissionais,
         professionalsError,
         reloadProfessionals: () =>
             setProfessionalsReloadKey((current) => current + 1),
+        resumePendingRequest,
         selectFamily,
     };
 }

@@ -8,6 +8,7 @@ import type {
 type SessionRow = {
     email: string;
     name: string;
+    phone: string;
     profile: AuthProfile;
     user_id: string;
 };
@@ -25,9 +26,19 @@ function openSessionDatabase() {
                 user_id TEXT NOT NULL,
                 email TEXT NOT NULL,
                 name TEXT NOT NULL,
+                phone TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
         `);
+
+        const columns = await database.getAllAsync<{ name: string }>(
+            "PRAGMA table_info(authenticated_sessions)",
+        );
+        if (!columns.some((column) => column.name === "phone")) {
+            await database.execAsync(
+                "ALTER TABLE authenticated_sessions ADD COLUMN phone TEXT NOT NULL DEFAULT ''",
+            );
+        }
 
         return database;
     })().catch((error) => {
@@ -42,18 +53,20 @@ export async function saveAuthenticatedAccount(account: AuthenticatedAccount) {
     const database = await openSessionDatabase();
 
     await database.runAsync(
-        `INSERT INTO authenticated_sessions (profile, user_id, email, name, updated_at)
-         VALUES ($profile, $userId, $email, $name, $updatedAt)
+        `INSERT INTO authenticated_sessions (profile, user_id, email, name, phone, updated_at)
+         VALUES ($profile, $userId, $email, $name, $phone, $updatedAt)
          ON CONFLICT(profile) DO UPDATE SET
              user_id = excluded.user_id,
              email = excluded.email,
              name = excluded.name,
+             phone = excluded.phone,
              updated_at = excluded.updated_at`,
         {
             $profile: account.profile,
             $userId: account.userId,
             $email: account.email,
             $name: account.name,
+            $phone: account.phone ?? "",
             $updatedAt: new Date().toISOString(),
         },
     );
@@ -64,7 +77,7 @@ export async function getAuthenticatedAccount(
 ): Promise<AuthenticatedAccount | null> {
     const database = await openSessionDatabase();
     const row = await database.getFirstAsync<SessionRow>(
-        `SELECT profile, user_id, email, name
+        `SELECT profile, user_id, email, name, phone
          FROM authenticated_sessions
          WHERE profile = ?`,
         profile,
@@ -77,6 +90,7 @@ export async function getAuthenticatedAccount(
     return {
         email: row.email,
         name: row.name,
+        phone: row.phone,
         profile: row.profile,
         userId: row.user_id,
     };

@@ -12,6 +12,7 @@ export type AuthProfile = "cliente" | "profissional";
 export type AuthenticatedAccount = {
     email: string;
     name: string;
+    phone?: string;
     profile: AuthProfile;
     userId: string;
 };
@@ -35,6 +36,7 @@ type ApiAccount = {
     id_familia?: string;
     nome: string;
     senha: string;
+    telefone?: string;
 };
 
 type AuthErrorCode =
@@ -204,6 +206,7 @@ export async function authenticate(
     return {
         email: account.email,
         name: account.nome,
+        phone: account.telefone ?? "",
         profile,
         userId: profile === "cliente"
             ? account.id_familia ?? account.id
@@ -229,6 +232,7 @@ export async function registerClient(input: ClientRegistration) {
     return {
         email: account.email,
         name: account.nome,
+        phone: account.telefone ?? input.phone.replace(/\D/g, ""),
         profile: "cliente" as const,
         userId: account.id_familia ?? account.id,
     };
@@ -262,6 +266,7 @@ export async function registerProfessional(input: ProfessionalRegistration) {
     return {
         email: account.email,
         name: account.nome,
+        phone: account.telefone ?? input.personal.phone.replace(/\D/g, ""),
         profile: "profissional" as const,
         userId: account.id_cuidador ?? account.id,
     };

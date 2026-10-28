@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { CLIENT_API_ENDPOINTS } from "@/features/app_cliente/config/api_config";
-import { saveAuthenticatedAccount } from "@/features/autenticacao/service/auth_session_repository";
+import {
+    getAuthenticatedAccount,
+    saveAuthenticatedAccount,
+} from "@/features/autenticacao/service/auth_session_repository";
 
 export type ClienteProfile = {
     email: string;
@@ -54,24 +57,63 @@ export function useClienteProfile(familyId?: string) {
         }
 
         const controller = new AbortController();
+        let active = true;
         setLoading(true);
         setError(undefined);
 
-        fetch(CLIENT_API_ENDPOINTS.familia(familyId), { signal: controller.signal })
-            .then(async (response) => {
-                if (!response.ok) throw new Error(`Erro ${response.status}`);
-                return response.json() as Promise<FamiliaApi>;
-            })
-            .then((family) => setProfile(mapFamily(family)))
-            .catch((failure: unknown) => {
-                if (failure instanceof Error && failure.name === "AbortError") return;
-                setError("Não foi possível carregar o perfil do cliente.");
-            })
-            .finally(() => {
-                if (!controller.signal.aborted) setLoading(false);
-            });
+        void (async () => {
+            let hasLocalProfile = false;
 
-        return () => controller.abort();
+            try {
+                const account = await getAuthenticatedAccount("cliente");
+                if (account?.userId === familyId && active) {
+                    hasLocalProfile = true;
+                    setProfile({
+                        email: account.email,
+                        id: account.userId,
+                        name: account.name,
+                        phone: account.phone ?? "",
+                    });
+                    setLoading(false);
+                }
+            } catch {
+                // O perfil ainda pode ser carregado normalmente pela API.
+            }
+
+            try {
+                const response = await fetch(
+                    CLIENT_API_ENDPOINTS.familia(familyId),
+                    { signal: controller.signal },
+                );
+                if (!response.ok) throw new Error(`Erro ${response.status}`);
+                const updated = mapFamily(await response.json() as FamiliaApi);
+                if (!active) return;
+                setProfile(updated);
+                try {
+                    await saveAuthenticatedAccount({
+                        email: updated.email,
+                        name: updated.name,
+                        phone: updated.phone,
+                        profile: "cliente",
+                        userId: updated.id,
+                    });
+                } catch {
+                    // A falha ao atualizar o cache não invalida os dados recebidos da API.
+                }
+            } catch (failure) {
+                if (failure instanceof Error && failure.name === "AbortError") return;
+                if (!hasLocalProfile && active) {
+                    setError("Não foi possível carregar o perfil do cliente.");
+                }
+            } finally {
+                if (active) setLoading(false);
+            }
+        })();
+
+        return () => {
+            active = false;
+            controller.abort();
+        };
     }, [familyId, reloadKey]);
 
     const updateProfile = useCallback(async (input: ClienteProfileInput) => {
@@ -92,6 +134,7 @@ export function useClienteProfile(familyId?: string) {
         await saveAuthenticatedAccount({
             email: updated.email,
             name: updated.name,
+            phone: updated.phone,
             profile: "cliente",
             userId: updated.id,
         });

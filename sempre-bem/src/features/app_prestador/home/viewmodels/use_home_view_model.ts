@@ -2,7 +2,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 
 import {
+    aceitarChamadoPrestador,
     atualizarDisponibilidadePrestador,
+    atualizarValorHoraPrestador,
     buscarDadosHomePrestador,
     type ChamadoAtualPrestador,
     type PrestadorApi,
@@ -16,6 +18,9 @@ export function useHomeViewModel() {
     const [currentCall, setCurrentCall] = useState<ChamadoAtualPrestador | null>(null);
     const [isLoadingProvider, setIsLoadingProvider] = useState(true);
     const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
+    const [isUpdatingHourlyRate, setIsUpdatingHourlyRate] = useState(false);
+    const [isAcceptingCall, setIsAcceptingCall] = useState(false);
+    const [acceptCallError, setAcceptCallError] = useState<string>();
     const [providerError, setProviderError] = useState<string>();
     const [reloadKey, setReloadKey] = useState(0);
 
@@ -72,15 +77,66 @@ export function useHomeViewModel() {
         }
     }
 
+    async function updateHourlyRate(value: number) {
+        if (!prestador || isUpdatingHourlyRate) return;
+
+        setIsUpdatingHourlyRate(true);
+        try {
+            const updatedProvider = await atualizarValorHoraPrestador(
+                prestador.id_cuidador,
+                value,
+            );
+            setPrestador(updatedProvider);
+        } finally {
+            setIsUpdatingHourlyRate(false);
+        }
+    }
+
+    async function acceptCurrentCall() {
+        if (!currentCall || !prestador || currentCall.status !== "PENDENTE" || isAcceptingCall) {
+            return false;
+        }
+
+        setIsAcceptingCall(true);
+        setAcceptCallError(undefined);
+
+        try {
+            await aceitarChamadoPrestador(
+                currentCall,
+                prestador,
+            );
+            setReloadKey((current) => current + 1);
+            return true;
+        } catch (error) {
+            setAcceptCallError(
+                error instanceof Error && (
+                    error.message.includes("já aceitou") ||
+                    error.message.includes("não está mais disponível")
+                )
+                    ? error.message
+                    : "Não foi possível aceitar o chamado. Tente novamente.",
+            );
+            return false;
+        } finally {
+            setIsAcceptingCall(false);
+        }
+    }
+
     return {
+        acceptCallError,
+        acceptCurrentCall,
         changeProfile: () => router.replace("/"),
+        clearAcceptCallError: () => setAcceptCallError(undefined),
         currentCall,
         isAvailable,
+        isAcceptingCall,
         isLoadingProvider,
         isUpdatingAvailability,
+        isUpdatingHourlyRate,
         prestador,
         providerError,
         reloadProvider: () => setReloadKey((current) => current + 1),
         toggleAvailability,
+        updateHourlyRate,
     };
 }

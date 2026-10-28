@@ -16,22 +16,41 @@ export type PrestadorApi = {
     formacao?: string;
     descricao_profissional?: string;
     status_disponibilidade: "DISPONIVEL" | "EM_ATENDIMENTO" | "INDISPONIVEL";
+    valor_hora?: number | null;
 };
 
 export type ChamadoAtualPrestador = {
     address: string;
+    allergies: string | null;
     caredPersonAge: number;
     dateLabel: string;
     duration: string;
+    durationHours: number;
+    expectedEarnings: number;
     familyMember: string;
+    healthConditions: string | null;
     id: string;
+    mobility: string | null;
     requester: string;
+    restrictions: string | null;
     service: string;
+    services: string[];
+    sex: string | null;
+    solicitationId: string;
     status: "EM_ATENDIMENTO" | "PENDENTE";
 };
 
 type SolicitacaoApi = {
+    cuidadores_aceitaram?: Array<{
+        aceito_em: string;
+        id_cuidador: string;
+        nome: string;
+        tipo_profissional: "CUIDADOR" | "ENFERMEIRO";
+        valor_hora: number;
+        valor_total: number;
+    }>;
     criado_em: string;
+    data_hora_resposta?: string | null;
     data_hora_solicitada: string;
     duracao_horas?: number;
     endereco_atendimento?: string;
@@ -45,7 +64,12 @@ type SolicitacaoApi = {
 };
 
 type AtendimentoApi = {
+    id?: string;
+    id_atendimento: string;
     id_solicitacao: string;
+    criado_em?: string;
+    data_hora_fim?: string | null;
+    data_hora_inicio?: string | null;
     status: "AGENDADO" | "CANCELADO" | "CONCLUIDO" | "EM_ANDAMENTO";
 };
 
@@ -55,9 +79,14 @@ type FamiliaApi = {
 };
 
 type IdosoApi = {
+    alergias?: string | null;
+    condicoes_saude?: string | null;
     data_nascimento: string;
     id_idoso: string;
+    mobilidade?: string | null;
     nome: string;
+    restricoes?: string | null;
+    sexo?: string | null;
 };
 
 export type DadosHomePrestador = {
@@ -135,7 +164,11 @@ function encontrarChamadoAtual(
         ? solicitacoes
               .filter(
                   (solicitacao) =>
-                      solicitacao.status === "PENDENTE" && !solicitacao.id_cuidador,
+                      (solicitacao.status === "PENDENTE" || solicitacao.status === "ACEITA") &&
+                      !solicitacao.id_cuidador &&
+                      !solicitacao.cuidadores_aceitaram?.some(
+                          (aceite) => String(aceite.id_cuidador) === String(prestador.id_cuidador),
+                      ),
               )
               .sort(
                   (a, b) =>
@@ -148,21 +181,36 @@ function encontrarChamadoAtual(
         return null;
     }
 
-    const familia = familias.find((item) => item.id_familia === solicitacao.id_familia);
-    const idoso = idosos.find((item) => item.id_idoso === solicitacao.id_idoso);
+    const familia = familias.find(
+        (item) => String(item.id_familia) === String(solicitacao.id_familia),
+    );
+    const idoso = idosos.find(
+        (item) => String(item.id_idoso) === String(solicitacao.id_idoso),
+    );
     const requestDate = new Date(solicitacao.data_hora_solicitada);
+    const service = solicitacao.servico?.trim() || "Atendimento domiciliar";
+    const durationHours = solicitacao.duracao_horas ?? 0;
 
     return {
         address: solicitacao.endereco_atendimento ?? "Endereço não informado",
+        allergies: idoso?.alergias?.trim() || null,
         caredPersonAge: idoso ? calcularIdade(idoso.data_nascimento, requestDate) : 0,
         dateLabel: formatarDataDoChamado(requestDate),
-        duration: solicitacao.duracao_horas
-            ? `${solicitacao.duracao_horas} ${solicitacao.duracao_horas === 1 ? "hora" : "horas"}`
+        duration: durationHours
+            ? `${durationHours} ${durationHours === 1 ? "hora" : "horas"}`
             : "Duração não informada",
+        durationHours,
+        expectedEarnings: durationHours * (prestador.valor_hora ?? 0),
         familyMember: idoso?.nome ?? "Familiar",
+        healthConditions: idoso?.condicoes_saude?.trim() || null,
         id: solicitacao.id,
+        mobility: idoso?.mobilidade?.trim() || null,
         requester: familia?.nome ?? "Família",
-        service: solicitacao.servico ?? "Atendimento domiciliar",
+        restrictions: idoso?.restricoes?.trim() || null,
+        service,
+        services: service.split(",").map((item) => item.trim()).filter(Boolean),
+        sex: idoso?.sexo?.trim() || null,
+        solicitationId: solicitacao.id_solicitacao,
         status: solicitacaoEmAndamento ? "EM_ATENDIMENTO" : "PENDENTE",
     };
 }
@@ -203,6 +251,49 @@ function calcularIdade(birthDateValue: string, referenceDate: Date) {
     return age;
 }
 
+export async function aceitarChamadoPrestador(
+    chamado: ChamadoAtualPrestador,
+    prestador: PrestadorApi,
+): Promise<void> {
+    const requestResponse = await fetch(PROVIDER_API_ENDPOINTS.solicitacao(chamado.id));
+    const currentRequest = await validarResposta<SolicitacaoApi>(requestResponse);
+    const acceptedProviders = currentRequest.cuidadores_aceitaram ?? [];
+
+    if (currentRequest.status !== "PENDENTE" && currentRequest.status !== "ACEITA") {
+        throw new Error("Este chamado não está mais disponível.");
+    }
+
+    if (acceptedProviders.some(
+        (acceptedProvider) =>
+            String(acceptedProvider.id_cuidador) === String(prestador.id_cuidador),
+    )) {
+        throw new Error("Você já aceitou este chamado.");
+    }
+
+    const acceptedAt = new Date().toISOString();
+    const response = await fetch(PROVIDER_API_ENDPOINTS.solicitacao(chamado.id), {
+        body: JSON.stringify({
+            cuidadores_aceitaram: [
+                ...acceptedProviders,
+                {
+                    aceito_em: acceptedAt,
+                    id_cuidador: prestador.id_cuidador,
+                    nome: prestador.nome,
+                    tipo_profissional: prestador.tipo_profissional ?? "CUIDADOR",
+                    valor_hora: prestador.valor_hora ?? 0,
+                    valor_total: chamado.expectedEarnings,
+                },
+            ],
+            data_hora_resposta: currentRequest.data_hora_resposta ?? acceptedAt,
+            status: "ACEITA",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+    });
+
+    await validarResposta<SolicitacaoApi>(response);
+}
+
 export async function atualizarDisponibilidadePrestador(
     prestadorId: string,
     disponivel: boolean,
@@ -218,6 +309,22 @@ export async function atualizarDisponibilidadePrestador(
             headers: {
                 "Content-Type": "application/json",
             },
+            method: "PATCH",
+        },
+    );
+
+    return validarResposta<PrestadorApi>(response);
+}
+
+export async function atualizarValorHoraPrestador(
+    prestadorId: string,
+    valorHora: number,
+): Promise<PrestadorApi> {
+    const response = await fetch(
+        PROVIDER_API_ENDPOINTS.prestador(prestadorId),
+        {
+            body: JSON.stringify({ valor_hora: valorHora }),
+            headers: { "Content-Type": "application/json" },
             method: "PATCH",
         },
     );

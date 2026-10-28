@@ -8,11 +8,11 @@ export default function RootLayout() {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="cliente"
+                name="(cliente)"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="cuidador"
+                name="(prestador)"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -32,19 +32,15 @@ export default function RootLayout() {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="perfil"
-                options={{ headerShown: false }}
-            />
-            <Stack.Screen
                 name="conta"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="diario-bordo"
+                name="atendimentos"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="atendimentos"
+                name="avaliacoes"
                 options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -53,10 +49,6 @@ export default function RootLayout() {
             />
             <Stack.Screen
                 name="pessoa-cuidada"
-                options={{ headerShown: false }}
-            />
-            <Stack.Screen
-                name="solicitacao"
                 options={{ headerShown: false }}
             />
             <Stack.Screen

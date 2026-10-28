@@ -4,8 +4,8 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { Image } from 'expo-image';
 import { useFonts } from 'expo-font';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getNameInitials } from '@/core/utils/name_initials';
 import { EditProfileModal } from '@/features/perfil_cliente/components/edit_profile_modal';
-import { ProfileBottomNav } from '@/features/perfil_cliente/components/profile_bottom_nav';
 import { ProfileMenuCard } from '@/features/perfil_cliente/components/profile_menu_card';
 import { useClienteProfile } from '@/features/perfil_cliente/state/profile';
 
@@ -28,9 +28,10 @@ export default function PerfilClienteScreen() {
   if (!fontsLoaded) return <View style={styles.screen} />;
   if (loading) return <View style={styles.state}><ActivityIndicator color="#713568" /><Text style={styles.stateText}>Carregando perfil...</Text></View>;
   if (error || !profile) return <View style={styles.state}><Text style={styles.stateText}>{error ?? 'Perfil não encontrado.'}</Text><Pressable onPress={reload}><Text style={styles.retry}>Tentar novamente</Text></Pressable></View>;
+  const initials = getNameInitials(profile.name);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={["top"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           <View style={styles.header}>
@@ -40,7 +41,9 @@ export default function PerfilClienteScreen() {
             </Pressable>
           </View>
           <View style={styles.identity}>
-            <Image accessibilityLabel={`Foto demonstrativa de ${profile.name}`} source={require('@/assets/figma/perfil/avatar.png')} style={styles.avatar} contentFit="cover" />
+            <View accessibilityLabel={`Iniciais de ${profile.name}`} style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
             <View style={styles.identityText}>
               <Text style={styles.name}>{profile.name}</Text>
               <Text style={styles.email}>{profile.email}</Text>
@@ -48,7 +51,7 @@ export default function PerfilClienteScreen() {
           </View>
           <View style={styles.menu}>
             <ProfileMenuCard title="Minha conta" description="Dados pessoais e editar perfil" onPress={() => setEditing(true)} />
-            <ProfileMenuCard title="Pessoas cuidadas" description="Gerenciar idosos" onPress={() => router.push('/pessoas-cuidadas')} />
+            <ProfileMenuCard title="Pessoas cuidadas" description="Gerenciar idosos" onPress={() => router.push({ pathname: '/pessoas-cuidadas', params: { familiaId } })} />
             <ProfileMenuCard title="Atendimentos" description="Histórico de cuidados" onPress={() => router.push({ pathname: '/atendimentos', params: { familiaId } })} />
             <ProfileMenuCard title="Configurações" description="Conta, segurança e privacidade" onPress={() => router.push({ pathname: '/conta', params: { familiaId } })} />
             <ProfileMenuCard title="Conta" description="Sair ou excluir conta" onPress={() => router.push({ pathname: '/conta', params: { familiaId } })} />
@@ -56,7 +59,6 @@ export default function PerfilClienteScreen() {
           <Pressable accessibilityRole="button" onPress={signOut} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}><Text style={styles.signOutText}>Sair</Text></Pressable>
         </View>
       </ScrollView>
-      <ProfileBottomNav familiaId={familiaId} selected="Perfil" />
       {editing ? <EditProfileModal initialValue={profile} onClose={() => setEditing(false)} onSave={async value => { try { await updateProfile(value); setEditing(false); } catch (failure) { Alert.alert('Não foi possível atualizar', failure instanceof Error ? failure.message : 'Tente novamente.'); } }} /> : null}
     </SafeAreaView>
   );
@@ -74,7 +76,8 @@ const styles = StyleSheet.create({
   notification: { width: 44, height: 44, borderRadius: 22, borderWidth: 1.1, borderColor: '#DDD5D2', backgroundColor: '#FFFEFB', alignItems: 'center', justifyContent: 'center' },
   icon: { width: 21.991, height: 21.991 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 18 },
-  avatar: { width: 82, height: 82, borderRadius: 41, borderWidth: 1.1, borderColor: '#FFFFFF', backgroundColor: '#F4EDF3' },
+  avatar: { width: 82, height: 82, borderRadius: 41, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: '#713568', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: 'Poppins-SemiBold', fontSize: 27, lineHeight: 34, color: '#FFFFFF', includeFontPadding: false },
   identityText: { flex: 1 },
   name: { fontFamily: 'Poppins-SemiBold', fontSize: 21, lineHeight: 27.3, color: '#262326', includeFontPadding: false },
   email: { fontFamily: 'Poppins-Regular', fontSize: 13, lineHeight: 19.5, color: '#81767B', includeFontPadding: false },
