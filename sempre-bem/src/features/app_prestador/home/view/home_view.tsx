@@ -1,6 +1,6 @@
 import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CancelAttendanceModal } from "@/core/components/cancel_attendance_modal";
@@ -27,20 +27,6 @@ const SHADOW = {
     shadowRadius: 4,
 } as const;
 
-function formatHourlyRateInput(value: string) {
-    const digits = value.replace(/\D/g, "").slice(0, 7);
-    if (!digits) return "";
-
-    return (Number(digits) / 100).toLocaleString("pt-BR", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-}
-
-function parseHourlyRate(value: string) {
-    return Number(value.replace(/\./g, "").replace(",", "."));
-}
-
 function formatCurrency(value: number) {
     return new Intl.NumberFormat("pt-BR", {
         currency: "BRL",
@@ -63,7 +49,6 @@ export default function HomeView() {
         acceptCallError,
         acceptCurrentCall,
         cancelCurrentAttendance,
-        changeProfile,
         clearAcceptCallError,
         currentCall,
         goToAttendanceRecords,
@@ -73,19 +58,16 @@ export default function HomeView() {
         isLoadingProvider,
         isStartingAttendance,
         isUpdatingAvailability,
-        isUpdatingHourlyRate,
         prestador,
         providerError,
         reloadProvider,
         openCurrentCallRoute,
+        openCurrentChat,
+        openProviderProfile,
         startCurrentAttendance,
         toggleAvailability,
-        updateHourlyRate,
     } = useHomeViewModel();
-    const [hourlyRateModalVisible, setHourlyRateModalVisible] = useState(false);
     const [callDetailsModalVisible, setCallDetailsModalVisible] = useState(false);
-    const [hourlyRateInput, setHourlyRateInput] = useState("");
-    const [hourlyRateError, setHourlyRateError] = useState<string>();
     const [cancelModalVisible, setCancelModalVisible] = useState(false);
     const [cancelAttendanceError, setCancelAttendanceError] = useState<string>();
     const [startCodeDigits, setStartCodeDigits] = useState(["", "", "", ""]);
@@ -115,9 +97,6 @@ export default function HomeView() {
               .map((part) => part.charAt(0).toUpperCase())
               .join("")
         : "--";
-    const hourlyRateLabel = prestador?.valor_hora && prestador.valor_hora > 0
-        ? new Intl.NumberFormat("pt-BR", { currency: "BRL", style: "currency" }).format(prestador.valor_hora)
-        : "Não definido";
     const requestCardScale = requestPulse.interpolate({
         inputRange: [0, 0.5, 1],
         outputRange: [1, 1.012, 1],
@@ -217,38 +196,6 @@ export default function HomeView() {
         setStartConfirmVisible(false);
     }, [currentCall?.appointmentId, isOnWay]);
 
-    function openHourlyRateModal() {
-        setHourlyRateInput(
-            prestador?.valor_hora
-                ? formatHourlyRateInput(String(Math.round(prestador.valor_hora * 100)))
-                : "",
-        );
-        setHourlyRateError(undefined);
-        setHourlyRateModalVisible(true);
-    }
-
-    function closeHourlyRateModal() {
-        if (isUpdatingHourlyRate) return;
-        setHourlyRateModalVisible(false);
-        setHourlyRateError(undefined);
-    }
-
-    async function saveHourlyRate() {
-        const value = parseHourlyRate(hourlyRateInput);
-        if (!Number.isFinite(value) || value < 1 || value > 99_999.99) {
-            setHourlyRateError("Informe um valor entre R$ 1,00 e R$ 99.999,99.");
-            return;
-        }
-
-        setHourlyRateError(undefined);
-        try {
-            await updateHourlyRate(value);
-            setHourlyRateModalVisible(false);
-        } catch {
-            setHourlyRateError("Não foi possível salvar o valor da hora.");
-        }
-    }
-
     function openCallDetailsModal() {
         clearAcceptCallError();
         setCallDetailsModalVisible(true);
@@ -295,8 +242,8 @@ export default function HomeView() {
                             />
                         </Pressable>
                         <Pressable
-                            accessibilityLabel="Trocar perfil"
-                            onPress={changeProfile}
+                            accessibilityLabel="Abrir perfil"
+                            onPress={openProviderProfile}
                             style={({ pressed }) => [styles.profileAvatar, pressed && styles.pressed]}
                         >
                             <Text style={styles.profileInitials}>{initials}</Text>
@@ -393,20 +340,6 @@ export default function HomeView() {
                     )}
                 </View>
 
-                <Pressable
-                    accessibilityRole="button"
-                    onPress={openHourlyRateModal}
-                    style={({ pressed }) => [styles.hourlyRateButton, pressed && styles.pressed]}
-                >
-                    <View style={styles.debugBadge}><Text style={styles.debugBadgeText}>DEBUG</Text></View>
-                    <View style={styles.hourlyRateCopy}>
-                        <Text style={styles.hourlyRateTitle}>Valor da hora de trabalho</Text>
-                        <Text style={styles.hourlyRateDescription}>Temporariamente configurado pela Home</Text>
-                    </View>
-                    <Text style={styles.hourlyRateValue}>{hourlyRateLabel}</Text>
-                    <SymbolView name={{ ios: "pencil", android: "edit", web: "edit" }} size={18} tintColor={COLORS.plum} />
-                </Pressable>
-
                 <Text style={[styles.sectionTitle, styles.todayTitle]}>Hoje</Text>
                 <View style={styles.metricsRow}>
                     <TodayCard label="Atendimentos" value="2" />
@@ -465,7 +398,6 @@ export default function HomeView() {
                                 {startCodeDigits.map((digit, index) => (
                                     <TextInput
                                         accessibilityLabel={`Dígito ${index + 1} do código de início`}
-                                        autoFocus={index === 0}
                                         key={index}
                                         keyboardType="number-pad"
                                         maxLength={1}
@@ -509,6 +441,15 @@ export default function HomeView() {
                                 tintColor={COLORS.plum}
                             />
                             <Text style={styles.openMapButtonText}>Ir para o mapa</Text>
+                        </Pressable>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={openCurrentChat}
+                            style={({ pressed }) => [styles.openMapButton, pressed && styles.detailsButtonPressed]}
+                        >
+                            <SymbolView name={{ ios: "message.fill", android: "chat", web: "chat" }} size={18} tintColor={COLORS.plum} />
+                            <Text style={styles.openMapButtonText}>Conversar com o cliente</Text>
                         </Pressable>
 
                         <Pressable
@@ -575,6 +516,15 @@ export default function HomeView() {
                                 tintColor={COLORS.surface}
                             />
                             <Text style={styles.recordButtonText}>Acompanhar atendimento</Text>
+                        </Pressable>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={openCurrentChat}
+                            style={({ pressed }) => [styles.openMapButton, pressed && styles.detailsButtonPressed]}
+                        >
+                            <SymbolView name={{ ios: "message.fill", android: "chat", web: "chat" }} size={18} tintColor={COLORS.plum} />
+                            <Text style={styles.openMapButtonText}>Conversar com o cliente</Text>
                         </Pressable>
 
                         <Pressable
@@ -930,36 +880,6 @@ export default function HomeView() {
                 </View>
             </Modal>
 
-            <Modal
-                animationType="fade"
-                onRequestClose={closeHourlyRateModal}
-                statusBarTranslucent
-                transparent
-                visible={hourlyRateModalVisible}
-            >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : undefined}
-                    style={styles.rateModalOverlay}
-                >
-                    <Pressable accessibilityLabel="Fechar edição do valor da hora" disabled={isUpdatingHourlyRate} onPress={closeHourlyRateModal} style={StyleSheet.absoluteFill} />
-                    <View accessibilityViewIsModal style={styles.rateModalCard}>
-                        <View style={styles.rateModalIcon}><SymbolView name={{ ios: "banknote", android: "payments", web: "payments" }} size={27} tintColor={COLORS.plum} /></View>
-                        <Text style={styles.rateModalTitle}>Valor da sua hora</Text>
-                        <Text style={styles.rateModalDescription}>Esse valor será exibido para os clientes enquanto você estiver online.</Text>
-                        <Text style={styles.rateInputLabel}>Valor por hora</Text>
-                        <View style={[styles.rateInputContainer, hourlyRateError && styles.rateInputInvalid]}>
-                            <Text style={styles.rateInputPrefix}>R$</Text>
-                            <TextInput accessibilityLabel="Valor por hora" autoFocus editable={!isUpdatingHourlyRate} keyboardType="numeric" onChangeText={(value) => { setHourlyRateInput(formatHourlyRateInput(value)); setHourlyRateError(undefined); }} placeholder="0,00" placeholderTextColor="#AAA2A5" selectTextOnFocus style={styles.rateInput} value={hourlyRateInput} />
-                        </View>
-                        {hourlyRateError ? <Text accessibilityRole="alert" style={styles.rateError}>{hourlyRateError}</Text> : null}
-                        <View style={styles.rateModalActions}>
-                            <Pressable disabled={isUpdatingHourlyRate} onPress={closeHourlyRateModal} style={styles.rateCancelButton}><Text style={styles.rateCancelText}>Cancelar</Text></Pressable>
-                            <Pressable disabled={isUpdatingHourlyRate} onPress={saveHourlyRate} style={styles.rateSaveButton}>{isUpdatingHourlyRate ? <ActivityIndicator color={COLORS.surface} size="small" /> : <Text style={styles.rateSaveText}>Salvar valor</Text>}</Pressable>
-                        </View>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
-
         </SafeAreaView>
     );
 }
@@ -1173,28 +1093,5 @@ const styles = StyleSheet.create({
     recordButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 13, backgroundColor: COLORS.plum, marginTop: 14 },
     recordButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: "900" },
     ongoingCancelButton: { minHeight: 36, alignItems: "center", justifyContent: "center", marginTop: 4 },
-    hourlyRateButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.plum, backgroundColor: COLORS.plumSoft },
-    debugBadge: { borderRadius: 6, backgroundColor: COLORS.plum, paddingHorizontal: 6, paddingVertical: 4 },
-    debugBadgeText: { color: COLORS.surface, fontSize: 8, fontWeight: "900", letterSpacing: 0.4 },
-    hourlyRateCopy: { flex: 1, minWidth: 0 },
-    hourlyRateTitle: { color: COLORS.text, fontSize: 12, fontWeight: "800" },
-    hourlyRateDescription: { color: COLORS.muted, fontSize: 9, lineHeight: 13, marginTop: 2 },
-    hourlyRateValue: { color: COLORS.plum, fontSize: 13, fontWeight: "800" },
-    rateModalOverlay: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(46, 41, 44, 0.58)", padding: 20 },
-    rateModalCard: { width: "100%", maxWidth: 380, borderRadius: 22, backgroundColor: COLORS.surface, padding: 22, ...SHADOW },
-    rateModalIcon: { width: 56, height: 56, alignItems: "center", justifyContent: "center", alignSelf: "center", borderRadius: 28, backgroundColor: COLORS.plumSoft },
-    rateModalTitle: { color: COLORS.text, fontSize: 20, lineHeight: 27, fontWeight: "800", marginTop: 14, textAlign: "center" },
-    rateModalDescription: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 5, textAlign: "center" },
-    rateInputLabel: { color: COLORS.text, fontSize: 12, fontWeight: "700", marginTop: 22, marginBottom: 8 },
-    rateInputContainer: { minHeight: 54, flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, paddingHorizontal: 14 },
-    rateInputInvalid: { borderColor: "#B85E61" },
-    rateInputPrefix: { color: COLORS.text, fontSize: 16, fontWeight: "800", marginRight: 8 },
-    rateInput: { flex: 1, color: COLORS.text, fontSize: 20, fontWeight: "800", paddingVertical: 10 },
-    rateError: { color: "#B85E61", fontSize: 11, lineHeight: 16, marginTop: 7 },
-    rateModalActions: { flexDirection: "row", gap: 10, marginTop: 22 },
-    rateCancelButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: COLORS.border },
-    rateCancelText: { color: COLORS.text, fontSize: 13, fontWeight: "700" },
-    rateSaveButton: { flex: 1.25, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: COLORS.plum },
-    rateSaveText: { color: COLORS.surface, fontSize: 13, fontWeight: "800" },
     pressed: { opacity: 0.65 },
 });

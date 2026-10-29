@@ -50,7 +50,7 @@ export default function AvaliacoesView() {
     const [error, setError] = useState<string>();
     const [formError, setFormError] = useState<string>();
     const [reloadKey, setReloadKey] = useState(0);
-    const autoOpenedAppointment = useRef<string>();
+    const autoOpenedAppointment = useRef<string | undefined>(undefined);
 
     useFocusEffect(useCallback(() => {
         const controller = new AbortController();

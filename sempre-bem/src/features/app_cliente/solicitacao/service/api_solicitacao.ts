@@ -463,7 +463,7 @@ export async function contratarPrestador(
         headers: { "Content-Type": "application/json" },
         method: "POST",
     });
-    await validarResposta<Record<string, unknown>>(appointmentResponse);
+    const createdAppointment = await validarResposta<AtendimentoApi>(appointmentResponse);
 
     const paymentResponse = await fetch(CLIENT_API_ENDPOINTS.pagamentos, {
         body: JSON.stringify({
@@ -486,5 +486,8 @@ export async function contratarPrestador(
         method: "PATCH",
     });
 
-    return { codigoInicio, idAtendimento };
+    return {
+        codigoInicio,
+        idAtendimento: String(createdAppointment.id ?? createdAppointment.id_atendimento),
+    };
 }

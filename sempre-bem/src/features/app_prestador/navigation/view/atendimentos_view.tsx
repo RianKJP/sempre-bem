@@ -103,6 +103,7 @@ export default function AtendimentosPrestadorView() {
                     <Action icon={{ ios: "book.fill", android: "menu_book", web: "menu_book" }} label="Diário de bordo" subtitle="Observações e atividades" onPress={() => open("/registro-diario")} />
                     <Action icon={{ ios: "fork.knife", android: "restaurant", web: "restaurant" }} label="Alimentação" subtitle="Refeições e aceitação" onPress={() => open("/registro-alimentacao")} />
                     <Action icon={{ ios: "pills.fill", android: "medication", web: "medication" }} label="Medicamentos" subtitle="Dosagem e administração" onPress={() => open("/registro-medicamento")} />
+                    <Action icon={{ ios: "message.fill", android: "chat", web: "chat" }} label="Chat com o cliente" subtitle="Mensagens sobre o atendimento" onPress={() => router.push({ pathname: "/chat", params: { atendimentoId: context.atendimentoId, usuarioId: String(prestadorId), usuarioTipo: "PRESTADOR" } } as never)} />
                 </View>
 
                 <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Atividade recente</Text><Text style={styles.count}>{registros.length} registros</Text></View>

@@ -44,6 +44,7 @@ export default function HomeView() {
         isLoadingFamily,
         isLoadingProfessionals,
         openActiveDiary,
+        openActiveChat,
         openClientProfile,
         openCaredPersonRegistration,
         openFamilyPicker,
@@ -205,6 +206,7 @@ export default function HomeView() {
                                 setCancelModalVisible(true);
                             }}
                             onOpenDiary={openActiveDiary}
+                            onChat={openActiveChat}
                             onFinish={() => {
                                 setFinishAttendanceError(undefined);
                                 setFinishModalVisible(true);
@@ -220,7 +222,7 @@ export default function HomeView() {
                                 setCancelAttendanceError(undefined);
                                 setCancelModalVisible(true);
                             }}
-                            onChat={() => Alert.alert("Chat", "O chat com o profissional será aberto aqui.")}
+                            onChat={openActiveChat}
                             onOpenMap={resumePendingRequest}
                             request={pendingRequest}
                         />
@@ -363,12 +365,14 @@ export default function HomeView() {
 
 function OngoingClientCareCard({
     onCancel,
+    onChat,
     onFinish,
     onOpenDiary,
     personName,
     request,
 }: {
     onCancel: () => void;
+    onChat: () => void;
     onFinish: () => void;
     onOpenDiary: () => void;
     personName: string;
@@ -424,6 +428,11 @@ function OngoingClientCareCard({
                         tintColor={COLORS.white}
                     />
                     <Text style={styles.ongoingClientPrimaryText}>Acompanhar registros</Text>
+                </Pressable>
+
+                <Pressable accessibilityRole="button" onPress={onChat} style={({ pressed }) => [styles.ongoingClientChatButton, pressed && styles.pressed]}>
+                    <SymbolView name={{ ios: "message.fill", android: "chat", web: "chat" }} size={17} tintColor={COLORS.primary} />
+                    <Text style={styles.ongoingClientChatText}>Conversar com o profissional</Text>
                 </Pressable>
 
                 <Pressable accessibilityRole="button" onPress={onFinish} style={({ pressed }) => [styles.finishAttendanceButton, pressed && styles.pressed]}>
@@ -675,6 +684,8 @@ const styles = StyleSheet.create({
     ongoingClientTimerEnd: { color: COLORS.textMuted, fontSize: 9, marginTop: 3 },
     ongoingClientPrimaryButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, backgroundColor: COLORS.primary, marginTop: 13 },
     ongoingClientPrimaryText: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
+    ongoingClientChatButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, borderWidth: 1, borderColor: COLORS.primary, marginTop: 8 },
+    ongoingClientChatText: { color: COLORS.primary, fontSize: 11, fontWeight: "900" },
     finishAttendanceButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, backgroundColor: "#738D2E", marginTop: 8 },
     finishAttendanceText: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
     onWayCardWrapper: { width: "100%", marginTop: 18, marginBottom: 4 },

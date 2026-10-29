@@ -274,6 +274,18 @@ export function useHomeViewModel() {
                 familiaId,
             },
         }),
+        openActiveChat: () => {
+            const atendimentoId = pendingRequest?.atendimento_ativo?.id ?? pendingRequest?.atendimento_ativo?.id_atendimento;
+            if (!atendimentoId) return;
+            router.push({
+                pathname: "/chat",
+                params: {
+                    atendimentoId,
+                    usuarioId: familiaId,
+                    usuarioTipo: "CLIENTE",
+                },
+            } as never);
+        },
         openCaredPersonRegistration: () => {
             setIsFamilyPickerVisible(false);
             router.push({

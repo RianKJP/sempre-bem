@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
     aceitarChamadoPrestador,
     atualizarDisponibilidadePrestador,
-    atualizarValorHoraPrestador,
     buscarDadosHomePrestador,
     cancelarAtendimentoPrestador,
     iniciarAtendimentoPrestador,
@@ -20,7 +19,6 @@ export function useHomeViewModel() {
     const [currentCall, setCurrentCall] = useState<ChamadoAtualPrestador | null>(null);
     const [isLoadingProvider, setIsLoadingProvider] = useState(true);
     const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
-    const [isUpdatingHourlyRate, setIsUpdatingHourlyRate] = useState(false);
     const [isAcceptingCall, setIsAcceptingCall] = useState(false);
     const [isCancellingAttendance, setIsCancellingAttendance] = useState(false);
     const [isStartingAttendance, setIsStartingAttendance] = useState(false);
@@ -84,21 +82,6 @@ export function useHomeViewModel() {
             setProviderError("Não foi possível atualizar sua disponibilidade.");
         } finally {
             setIsUpdatingAvailability(false);
-        }
-    }
-
-    async function updateHourlyRate(value: number) {
-        if (!prestador || isUpdatingHourlyRate) return;
-
-        setIsUpdatingHourlyRate(true);
-        try {
-            const updatedProvider = await atualizarValorHoraPrestador(
-                prestador.id_cuidador,
-                value,
-            );
-            setPrestador(updatedProvider);
-        } finally {
-            setIsUpdatingHourlyRate(false);
         }
     }
 
@@ -173,7 +156,10 @@ export function useHomeViewModel() {
     return {
         acceptCallError,
         acceptCurrentCall,
-        changeProfile: () => router.replace("/"),
+        openProviderProfile: () => router.push({
+            pathname: "/perfil-prestador",
+            params: { prestadorId },
+        }),
         cancelCurrentAttendance,
         clearAcceptCallError: () => setAcceptCallError(undefined),
         currentCall,
@@ -184,13 +170,22 @@ export function useHomeViewModel() {
         isLoadingProvider,
         isStartingAttendance,
         isUpdatingAvailability,
-        isUpdatingHourlyRate,
         prestador,
         providerError,
         reloadProvider: () => setReloadKey((current) => current + 1),
         openCurrentCallRoute: () => router.push({ pathname: "/prestador-rota", params: { prestadorId } }),
+        openCurrentChat: () => {
+            if (!currentCall?.appointmentId) return;
+            router.push({
+                pathname: "/chat",
+                params: {
+                    atendimentoId: currentCall.appointmentId,
+                    usuarioId: prestadorId,
+                    usuarioTipo: "PRESTADOR",
+                },
+            } as never);
+        },
         startCurrentAttendance,
         toggleAvailability,
-        updateHourlyRate,
     };
 }

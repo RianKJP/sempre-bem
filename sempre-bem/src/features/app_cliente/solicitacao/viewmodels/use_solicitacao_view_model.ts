@@ -88,6 +88,7 @@ export function useSolicitacaoViewModel() {
     const [isSearching, setIsSearching] = useState(false);
     const [activeRequestId, setActiveRequestId] = useState<string>();
     const [activeRequest, setActiveRequest] = useState<SolicitacaoAtendimentoApi>();
+    const [activeAttendanceId, setActiveAttendanceId] = useState<string>();
     const [acceptedProviders, setAcceptedProviders] = useState<PrestadorAceiteApi[]>([]);
     const [hiredProvider, setHiredProvider] = useState<PrestadorAceiteApi>();
     const [startCode, setStartCode] = useState<string>();
@@ -143,6 +144,7 @@ export function useSolicitacaoViewModel() {
                         controller.signal,
                     );
                     setStartCode(atendimento?.codigo_inicio);
+                    setActiveAttendanceId(atendimento ? String(atendimento.id ?? atendimento.id_atendimento) : undefined);
                 }
                 setAddress(request.endereco_atendimento);
                 setDuration(request.duracao_horas);
@@ -428,6 +430,7 @@ export function useSolicitacaoViewModel() {
             });
             setHiredProvider(provider);
             setStartCode(result.codigoInicio);
+            setActiveAttendanceId(result.idAtendimento);
             return true;
         } catch (error) {
             setHiringError(error instanceof Error ? error.message : "Não foi possível contratar o profissional.");
@@ -482,6 +485,17 @@ export function useSolicitacaoViewModel() {
         clearHiringError: () => setHiringError(undefined),
         openCustomDuration,
         openCustomService,
+        openChat: () => {
+            if (!activeAttendanceId || !familiaId) return;
+            router.push({
+                pathname: "/chat",
+                params: {
+                    atendimentoId: activeAttendanceId,
+                    usuarioId: String(familiaId),
+                    usuarioTipo: "CLIENTE",
+                },
+            } as never);
+        },
         paymentMethod,
         recommendation,
         reloadCareRecipients: () => setCareRecipientsReloadKey((current) => current + 1),

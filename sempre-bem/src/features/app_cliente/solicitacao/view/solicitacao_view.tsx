@@ -98,6 +98,7 @@ export default function SolicitacaoView() {
         clearHiringError,
         openCustomDuration,
         openCustomService,
+        openChat,
         paymentMethod,
         recommendation,
         reloadCareRecipients,
@@ -715,7 +716,7 @@ export default function SolicitacaoView() {
                                 </View>
                                 <Pressable
                                     accessibilityRole="button"
-                                    onPress={() => Alert.alert("Chat", "O chat com o profissional será aberto aqui.")}
+                                    onPress={openChat}
                                     style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
                                 >
                                     <SymbolView name={{ ios: "message.fill", android: "chat", web: "chat" }} size={18} tintColor={COLORS.white} />

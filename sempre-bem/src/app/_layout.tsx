@@ -36,6 +36,14 @@ export default function RootLayout() {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
+                name="conta-prestador"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="chat"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
                 name="atendimentos"
                 options={{ headerShown: false }}
             />
