@@ -1,10 +1,13 @@
 import { SymbolView } from "expo-symbols";
-import { useEffect, useRef } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CancelAttendanceModal } from "@/core/components/cancel_attendance_modal";
+import { FinishAttendanceModal } from "@/core/components/finish_attendance_modal";
 import { HomeBannerCarousel } from "@/features/app_cliente/home/components/home_banner_carousel";
 import { ProfessionalCard } from "@/features/app_cliente/home/components/home_professional_card";
+import type { SolicitacaoAtendimentoApi } from "@/features/app_cliente/solicitacao/service/api_solicitacao";
 import {
     type HomeFamily,
     useHomeViewModel,
@@ -30,14 +33,17 @@ const COLORS = {
 export default function HomeView() {
     const insets = useSafeAreaInsets();
     const {
+        cancelActiveAttendance,
         closeFamilyPicker,
         familia,
         familiaId,
         familiares,
+        finishActiveAttendance,
         familyError,
         isFamilyPickerVisible,
         isLoadingFamily,
         isLoadingProfessionals,
+        openActiveDiary,
         openClientProfile,
         openCaredPersonRegistration,
         openFamilyPicker,
@@ -49,6 +55,48 @@ export default function HomeView() {
         resumePendingRequest,
         selectFamily,
     } = useHomeViewModel();
+    const [cancelModalVisible, setCancelModalVisible] = useState(false);
+    const [isCancellingAttendance, setIsCancellingAttendance] = useState(false);
+    const [cancelAttendanceError, setCancelAttendanceError] = useState<string>();
+    const [finishModalVisible, setFinishModalVisible] = useState(false);
+    const [isFinishingAttendance, setIsFinishingAttendance] = useState(false);
+    const [finishAttendanceError, setFinishAttendanceError] = useState<string>();
+
+    function closeCancelModal() {
+        if (isCancellingAttendance) return;
+        setCancelModalVisible(false);
+        setCancelAttendanceError(undefined);
+    }
+
+    async function confirmAttendanceCancellation() {
+        setIsCancellingAttendance(true);
+        setCancelAttendanceError(undefined);
+        const cancelled = await cancelActiveAttendance();
+        setIsCancellingAttendance(false);
+        if (cancelled) {
+            setCancelModalVisible(false);
+            return;
+        }
+        setCancelAttendanceError("Não foi possível cancelar. Verifique sua conexão e tente novamente.");
+    }
+
+    function closeFinishModal() {
+        if (isFinishingAttendance) return;
+        setFinishModalVisible(false);
+        setFinishAttendanceError(undefined);
+    }
+
+    async function confirmAttendanceFinish() {
+        setIsFinishingAttendance(true);
+        setFinishAttendanceError(undefined);
+        const finished = await finishActiveAttendance();
+        setIsFinishingAttendance(false);
+        if (finished) {
+            setFinishModalVisible(false);
+            return;
+        }
+        setFinishAttendanceError("Não foi possível finalizar. Verifique sua conexão e tente novamente.");
+    }
 
     const primeiroNome = familia?.nome.split(" ")[0] ?? "Cliente";
     const iniciaisFamilia = familia
@@ -67,7 +115,7 @@ export default function HomeView() {
                 bounces={false}
                 contentContainerStyle={[
                     styles.content,
-                    pendingRequest && styles.contentWithPendingRequest,
+                    pendingRequest && !pendingRequest.atendimento_ativo && styles.contentWithPendingRequest,
                 ]}
                 overScrollMode="never"
                 showsVerticalScrollIndicator={false}
@@ -149,6 +197,36 @@ export default function HomeView() {
                     </View>
                 )}
 
+                {pendingRequest?.atendimento_ativo && pendingRequest.prestador_contratado ? (
+                    pendingRequest.atendimento_ativo.status === "EM_ANDAMENTO" ? (
+                        <OngoingClientCareCard
+                            onCancel={() => {
+                                setCancelAttendanceError(undefined);
+                                setCancelModalVisible(true);
+                            }}
+                            onOpenDiary={openActiveDiary}
+                            onFinish={() => {
+                                setFinishAttendanceError(undefined);
+                                setFinishModalVisible(true);
+                            }}
+                            personName={familiares.find(
+                                (person) => String(person.id) === String(pendingRequest.id_idoso),
+                            )?.name ?? "Pessoa cuidada"}
+                            request={pendingRequest}
+                        />
+                    ) : (
+                        <OnWayCareCard
+                            onCancel={() => {
+                                setCancelAttendanceError(undefined);
+                                setCancelModalVisible(true);
+                            }}
+                            onChat={() => Alert.alert("Chat", "O chat com o profissional será aberto aqui.")}
+                            onOpenMap={resumePendingRequest}
+                            request={pendingRequest}
+                        />
+                    )
+                ) : null}
+
                 <HomeBannerCarousel />
 
                 <View style={styles.sectionHeader}>
@@ -181,9 +259,25 @@ export default function HomeView() {
                 )}
             </ScrollView>
 
-            {pendingRequest ? (
+            {pendingRequest && !pendingRequest.atendimento_ativo ? (
                 <PendingRequestFloatingCard onPress={resumePendingRequest} />
             ) : null}
+
+            <CancelAttendanceModal
+                error={cancelAttendanceError}
+                isCancelling={isCancellingAttendance}
+                onClose={closeCancelModal}
+                onConfirm={() => void confirmAttendanceCancellation()}
+                visible={cancelModalVisible}
+            />
+            <FinishAttendanceModal
+                error={finishAttendanceError}
+                isFinishing={isFinishingAttendance}
+                onClose={closeFinishModal}
+                onConfirm={() => void confirmAttendanceFinish()}
+                personName={familiares.find((person) => String(person.id) === String(pendingRequest?.id_idoso))?.name ?? "Pessoa cuidada"}
+                visible={finishModalVisible}
+            />
 
             <Modal
                 animationType="fade"
@@ -265,6 +359,163 @@ export default function HomeView() {
             </Modal>
         </SafeAreaView>
     );
+}
+
+function OngoingClientCareCard({
+    onCancel,
+    onFinish,
+    onOpenDiary,
+    personName,
+    request,
+}: {
+    onCancel: () => void;
+    onFinish: () => void;
+    onOpenDiary: () => void;
+    personName: string;
+    request: SolicitacaoAtendimentoApi;
+}) {
+    const [now, setNow] = useState(Date.now());
+    const attendance = request.atendimento_ativo;
+    const provider = request.prestador_contratado;
+
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    if (!attendance || !provider) return null;
+
+    const elapsed = formatClientElapsed(attendance.data_hora_inicio, now);
+    const expectedEnd = attendance.data_hora_prevista_fim
+        ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" })
+            .format(new Date(attendance.data_hora_prevista_fim))
+        : "Não informado";
+
+    return (
+        <View style={styles.ongoingClientCardWrapper}>
+            <View style={styles.ongoingClientCard}>
+                <View style={styles.ongoingClientHeader}>
+                    <View style={styles.ongoingClientStatusDot} />
+                    <Text style={styles.ongoingClientStatus}>ATENDIMENTO EM ANDAMENTO</Text>
+                    <View style={styles.ongoingClientRecordsPill}>
+                        <Text style={styles.ongoingClientRecordsText}>
+                            {attendance.registros_diario?.length ?? 0} registros
+                        </Text>
+                    </View>
+                </View>
+
+                <Text style={styles.ongoingClientPerson}>{personName}</Text>
+                <Text style={styles.ongoingClientProvider}>Profissional: {provider.nome}</Text>
+
+                <View style={styles.ongoingClientTimer}>
+                    <Text style={styles.ongoingClientTimerLabel}>TEMPO DECORRIDO</Text>
+                    <Text style={styles.ongoingClientTimerValue}>{elapsed}</Text>
+                    <Text style={styles.ongoingClientTimerEnd}>Término previsto: {expectedEnd}</Text>
+                </View>
+
+                <Pressable
+                    accessibilityRole="button"
+                    onPress={onOpenDiary}
+                    style={({ pressed }) => [styles.ongoingClientPrimaryButton, pressed && styles.pressed]}
+                >
+                    <SymbolView
+                        name={{ ios: "book", android: "menu_book", web: "menu_book" }}
+                        size={18}
+                        tintColor={COLORS.white}
+                    />
+                    <Text style={styles.ongoingClientPrimaryText}>Acompanhar registros</Text>
+                </Pressable>
+
+                <Pressable accessibilityRole="button" onPress={onFinish} style={({ pressed }) => [styles.finishAttendanceButton, pressed && styles.pressed]}>
+                    <SymbolView name={{ ios: "checkmark.circle.fill", android: "check_circle", web: "check_circle" }} size={18} tintColor={COLORS.white} />
+                    <Text style={styles.finishAttendanceText}>Finalizar atendimento</Text>
+                </Pressable>
+
+                <Pressable
+                    accessibilityRole="button"
+                    onPress={onCancel}
+                    style={({ pressed }) => [styles.cancelAttendanceButton, pressed && styles.pressed]}
+                >
+                    <Text style={styles.cancelAttendanceText}>Cancelar atendimento</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+}
+
+function formatClientElapsed(startTime: string | null, now: number) {
+    if (!startTime) return "00:00:00";
+    const totalSeconds = Math.max(0, Math.floor((now - Date.parse(startTime)) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds]
+        .map((value) => String(value).padStart(2, "0"))
+        .join(":");
+}
+
+function OnWayCareCard({
+    onCancel,
+    onChat,
+    onOpenMap,
+    request,
+}: {
+    onCancel: () => void;
+    onChat: () => void;
+    onOpenMap: () => void;
+    request: SolicitacaoAtendimentoApi;
+}) {
+    const provider = request.prestador_contratado;
+    if (!provider) return null;
+
+    const role = provider.tipo_profissional === "ENFERMEIRO" ? "Enfermeiro" : "Cuidador";
+    const initials = provider.nome.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("");
+
+    return (
+        <View style={styles.onWayCardWrapper}>
+            <View style={styles.onWayCard}>
+                <View style={styles.onWayHeader}>
+                    <View style={styles.onWayStatusDot} />
+                    <Text style={styles.onWayStatus}>
+                        {request.atendimento_ativo?.status === "EM_ANDAMENTO"
+                            ? "ATENDIMENTO EM ANDAMENTO"
+                            : "PROFISSIONAL A CAMINHO"}
+                    </Text>
+                    <View style={styles.onWayCodePill}>
+                        <Text style={styles.onWayCodeLabel}>CÓDIGO</Text>
+                        <Text style={styles.onWayCode}>{request.atendimento_ativo?.codigo_inicio ?? "----"}</Text>
+                    </View>
+                </View>
+                <View style={styles.onWayProviderRow}>
+                    <View style={styles.onWayAvatar}><Text style={styles.onWayInitials}>{initials}</Text></View>
+                    <View style={styles.onWayProviderCopy}>
+                        <Text numberOfLines={1} style={styles.onWayProviderName}>{provider.nome}</Text>
+                        <Text style={styles.onWayProviderMeta}>
+                            {role} · {(provider.nota_media ?? 0).toFixed(1)} ★ · {provider.atendimentos_concluidos ?? 0} chamados
+                        </Text>
+                        <Text style={styles.onWayPrice}>{formatHomeMoney(provider.valor_total)}</Text>
+                    </View>
+                </View>
+                <View style={styles.onWayActions}>
+                    <Pressable accessibilityRole="button" onPress={onChat} style={({ pressed }) => [styles.onWaySecondaryButton, pressed && styles.pressed]}>
+                        <SymbolView name={{ ios: "message", android: "chat", web: "chat" }} size={16} tintColor={COLORS.primary} />
+                        <Text style={styles.onWaySecondaryText}>Chat</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" onPress={onOpenMap} style={({ pressed }) => [styles.onWayPrimaryButton, pressed && styles.pressed]}>
+                        <SymbolView name={{ ios: "map.fill", android: "map", web: "map" }} size={16} tintColor={COLORS.white} />
+                        <Text style={styles.onWayPrimaryText}>Voltar ao mapa</Text>
+                    </Pressable>
+                </View>
+                <Pressable accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.cancelAttendanceButton, pressed && styles.pressed]}>
+                    <Text style={styles.cancelAttendanceText}>Cancelar atendimento</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+}
+
+function formatHomeMoney(value: number) {
+    return new Intl.NumberFormat("pt-BR", { currency: "BRL", minimumFractionDigits: 2, style: "currency" }).format(value);
 }
 
 function PendingRequestFloatingCard({ onPress }: { onPress: () => void }) {
@@ -409,4 +660,43 @@ const styles = StyleSheet.create({
     pendingRequestDescription: { color: "rgba(255, 255, 255, 0.78)", fontSize: 10, lineHeight: 14, marginTop: 3 },
     pendingRequestAction: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 2, borderRadius: 10, backgroundColor: COLORS.white, paddingHorizontal: 10 },
     pendingRequestActionText: { color: COLORS.primary, fontSize: 10, lineHeight: 12, fontWeight: "800", textAlign: "center" },
+    ongoingClientCardWrapper: { width: "100%", marginTop: 18, marginBottom: 4 },
+    ongoingClientCard: { overflow: "hidden", borderRadius: 20, borderWidth: 1, borderColor: "#D7E1B8", backgroundColor: COLORS.surface, padding: 15, elevation: 7, shadowColor: COLORS.secondary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.16, shadowRadius: 9 },
+    ongoingClientHeader: { flexDirection: "row", alignItems: "center" },
+    ongoingClientStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.secondary, marginRight: 7 },
+    ongoingClientStatus: { flex: 1, color: COLORS.secondary, fontSize: 8, fontWeight: "900", letterSpacing: 0.5 },
+    ongoingClientRecordsPill: { borderRadius: 8, backgroundColor: "#F0F4E3", paddingHorizontal: 8, paddingVertical: 5 },
+    ongoingClientRecordsText: { color: "#82934F", fontSize: 8, fontWeight: "800" },
+    ongoingClientPerson: { color: COLORS.text, fontSize: 18, lineHeight: 23, fontWeight: "900", marginTop: 13 },
+    ongoingClientProvider: { color: COLORS.textMuted, fontSize: 10, marginTop: 2 },
+    ongoingClientTimer: { alignItems: "center", borderRadius: 17, backgroundColor: COLORS.primarySoft, marginTop: 14, paddingVertical: 15 },
+    ongoingClientTimerLabel: { color: COLORS.primary, fontSize: 8, fontWeight: "900", letterSpacing: 0.55 },
+    ongoingClientTimerValue: { color: COLORS.primary, fontSize: 31, fontWeight: "900", letterSpacing: 1.5, marginTop: 3 },
+    ongoingClientTimerEnd: { color: COLORS.textMuted, fontSize: 9, marginTop: 3 },
+    ongoingClientPrimaryButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, backgroundColor: COLORS.primary, marginTop: 13 },
+    ongoingClientPrimaryText: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
+    finishAttendanceButton: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, backgroundColor: "#738D2E", marginTop: 8 },
+    finishAttendanceText: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
+    onWayCardWrapper: { width: "100%", marginTop: 18, marginBottom: 4 },
+    onWayCard: { borderRadius: 20, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: COLORS.surface, padding: 13, elevation: 9, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.2, shadowRadius: 10 },
+    onWayHeader: { flexDirection: "row", alignItems: "center" },
+    onWayStatusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.secondary, marginRight: 6 },
+    onWayStatus: { flex: 1, color: COLORS.secondary, fontSize: 8, fontWeight: "900", letterSpacing: 0.45 },
+    onWayCodePill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, backgroundColor: COLORS.primarySoft, paddingHorizontal: 8, paddingVertical: 5 },
+    onWayCodeLabel: { color: COLORS.textMuted, fontSize: 7, fontWeight: "800" },
+    onWayCode: { color: COLORS.primary, fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+    onWayProviderRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
+    onWayAvatar: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: COLORS.primary },
+    onWayInitials: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
+    onWayProviderCopy: { flex: 1, minWidth: 0, marginLeft: 10 },
+    onWayProviderName: { color: COLORS.text, fontSize: 14, fontWeight: "900" },
+    onWayProviderMeta: { color: COLORS.textMuted, fontSize: 9, marginTop: 2 },
+    onWayPrice: { color: COLORS.primary, fontSize: 11, fontWeight: "900", marginTop: 3 },
+    onWayActions: { flexDirection: "row", gap: 8, marginTop: 11 },
+    onWaySecondaryButton: { flex: 0.75, minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 10, borderWidth: 1, borderColor: COLORS.primary },
+    onWaySecondaryText: { color: COLORS.primary, fontSize: 10, fontWeight: "900" },
+    onWayPrimaryButton: { flex: 1.25, minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 10, backgroundColor: COLORS.primary },
+    onWayPrimaryText: { color: COLORS.white, fontSize: 10, fontWeight: "900" },
+    cancelAttendanceButton: { minHeight: 34, alignItems: "center", justifyContent: "center", marginTop: 4 },
+    cancelAttendanceText: { color: "#B64E55", fontSize: 10, fontWeight: "800", textDecorationLine: "underline" },
 });

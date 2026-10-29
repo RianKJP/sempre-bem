@@ -36,7 +36,7 @@ type SolicitacaoApi = {
     id_idoso: string;
     id_solicitacao: string;
     servico?: string;
-    status: "ACEITA" | "CANCELADA" | "PENDENTE";
+    status: "ACEITA" | "CANCELADA" | "CONTRATADO" | "PENDENTE";
 };
 
 type AtendimentoApi = {
@@ -45,7 +45,7 @@ type AtendimentoApi = {
     id: string;
     id_atendimento: string;
     id_solicitacao: string;
-    status: "AGENDADO" | "CANCELADO" | "CONCLUIDO" | "EM_ANDAMENTO";
+    status: "A_CAMINHO" | "CANCELADO_CLIENTE" | "CANCELADO_PRESTADOR" | "CONCLUIDO" | "EM_ANDAMENTO";
 };
 
 type IdosoApi = {
@@ -66,7 +66,7 @@ type PagamentoApi = {
 
 type AvaliacaoApi = {
     id_atendimento: string;
-    nota: number;
+    nota: number | null;
 };
 
 type HistoryApiData = {
@@ -173,7 +173,9 @@ function montarItemDoHistorico(
         price: pagamento
             ? new Intl.NumberFormat("pt-BR", { currency: "BRL", style: "currency" }).format(pagamento.valor)
             : "Valor não informado",
-        rating: avaliacao ? avaliacao.nota.toLocaleString("pt-BR", { minimumFractionDigits: 1 }) : "Sem avaliação",
+        rating: typeof avaliacao?.nota === "number"
+            ? avaliacao.nota.toLocaleString("pt-BR", { minimumFractionDigits: 1 })
+            : "Sem avaliação",
         service: solicitacao.servico ?? "Atendimento domiciliar",
         status: mapearStatus(solicitacao.status, atendimento?.status),
         time: new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(date),
@@ -185,7 +187,7 @@ function mapearStatus(
     solicitacaoStatus: SolicitacaoApi["status"],
     atendimentoStatus?: AtendimentoApi["status"],
 ): AppointmentStatus {
-    if (solicitacaoStatus === "CANCELADA" || atendimentoStatus === "CANCELADO") {
+    if (solicitacaoStatus === "CANCELADA" || atendimentoStatus === "CANCELADO_CLIENTE" || atendimentoStatus === "CANCELADO_PRESTADOR") {
         return "cancelled";
     }
 
@@ -197,7 +199,7 @@ function mapearStatus(
         return "in_progress";
     }
 
-    if (solicitacaoStatus === "ACEITA" || atendimentoStatus === "AGENDADO") {
+    if (solicitacaoStatus === "ACEITA" || solicitacaoStatus === "CONTRATADO" || atendimentoStatus === "A_CAMINHO") {
         return "accepted";
     }
 

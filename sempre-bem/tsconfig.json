@@ -16,6 +16,8 @@
   ],
   "exclude": [
     "SempreBem_Entrega_Final/**",
-    "index.tsx"
+    "Medicamentos/**",
+    "diario_bordo.tsx",
+    "index copy.tsx"
   ]
 }

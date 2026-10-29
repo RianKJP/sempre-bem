@@ -2,15 +2,14 @@ import { API_BASE_URL } from "@/core/config/api_config";
 
 export const CLIENT_API_ENDPOINTS = {
     atendimentos: `${API_BASE_URL}/atendimento`,
+    atendimento: (atendimentoId: string) =>
+        `${API_BASE_URL}/atendimento/${encodeURIComponent(atendimentoId)}`,
     avaliacoes: `${API_BASE_URL}/avaliacao`,
     avaliacao: (avaliacaoId: string) =>
         `${API_BASE_URL}/avaliacao/${encodeURIComponent(avaliacaoId)}`,
     cuidadores: `${API_BASE_URL}/cuidador`,
     cuidador: (cuidadorId: string) =>
         `${API_BASE_URL}/cuidador/${encodeURIComponent(cuidadorId)}`,
-    diarios: `${API_BASE_URL}/diario_bordo`,
-    diario: (diarioId: string) =>
-        `${API_BASE_URL}/diario_bordo/${encodeURIComponent(diarioId)}`,
     familia: (familiaId: string) =>
         `${API_BASE_URL}/familia/${encodeURIComponent(familiaId)}`,
     idososDaFamilia: (familiaId: string) =>
@@ -19,6 +18,8 @@ export const CLIENT_API_ENDPOINTS = {
     idoso: (idosoId: string) =>
         `${API_BASE_URL}/idoso/${encodeURIComponent(idosoId)}`,
     pagamentos: `${API_BASE_URL}/pagamento`,
+    pagamento: (pagamentoId: string) =>
+        `${API_BASE_URL}/pagamento/${encodeURIComponent(pagamentoId)}`,
     solicitacao: (solicitacaoId: string) =>
         `${API_BASE_URL}/solicitacao_atendimento/${encodeURIComponent(solicitacaoId)}`,
     solicitacoes: `${API_BASE_URL}/solicitacao_atendimento`,

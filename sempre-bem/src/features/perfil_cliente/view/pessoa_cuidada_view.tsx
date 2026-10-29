@@ -52,7 +52,6 @@ export default function PessoaCuidadaScreen() {
           <ProfileMenuCard title="Medicamentos" description="Nenhum medicamento cadastrado" onPress={() => unavailable('Medicamentos')} />
           <ProfileMenuCard title="Alimentação" description="Controle de refeições e histórico" onPress={() => unavailable('Alimentação')} />
           <ProfileMenuCard title="Atendimentos" description="Consultar histórico de cuidados" onPress={() => router.push({ pathname: '/atendimentos', params: { familiaId: familyId } })} />
-          <ProfileMenuCard title="Diário de Bordo" description="Consultar registros dos atendimentos" onPress={() => router.push({ pathname: '/diario-bordo', params: { familiaId: familyId } })} />
         </View>
         <View style={styles.actions}>
           <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={({ pressed }) => [styles.action, styles.edit, pressed && styles.pressed]}><Image source={require('@/assets/figma/pessoa-cuidada/edit-action.svg')} style={styles.actionIcon} contentFit="contain" /><Text style={styles.editText}>Editar</Text></Pressable>

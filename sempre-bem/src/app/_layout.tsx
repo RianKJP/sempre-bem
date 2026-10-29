@@ -55,6 +55,26 @@ export default function RootLayout() {
                 name="historico_atendimentos"
                 options={{ headerShown: false }}
             />
+            <Stack.Screen
+                name="prestador-rota"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="registro-diario"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="registro-alimentacao"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="registro-medicamento"
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="registro-medicamento-form"
+                options={{ headerShown: false }}
+            />
         </Stack>
     );
 }

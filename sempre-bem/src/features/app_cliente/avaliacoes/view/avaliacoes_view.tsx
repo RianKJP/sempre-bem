@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import {
@@ -37,8 +37,9 @@ const COLORS = {
 
 export default function AvaliacoesView() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ familiaId?: string | string[] }>();
+    const params = useLocalSearchParams<{ atendimentoId?: string | string[]; familiaId?: string | string[] }>();
     const familyId = Array.isArray(params.familiaId) ? params.familiaId[0] : params.familiaId ?? "1";
+    const targetAppointmentId = Array.isArray(params.atendimentoId) ? params.atendimentoId[0] : params.atendimentoId;
     const fontsLoaded = useClienteFonts();
     const [appointments, setAppointments] = useState<EvaluationAppointment[]>([]);
     const [selected, setSelected] = useState<EvaluationAppointment>();
@@ -49,13 +50,28 @@ export default function AvaliacoesView() {
     const [error, setError] = useState<string>();
     const [formError, setFormError] = useState<string>();
     const [reloadKey, setReloadKey] = useState(0);
+    const autoOpenedAppointment = useRef<string>();
 
     useFocusEffect(useCallback(() => {
         const controller = new AbortController();
         setLoading(true);
         setError(undefined);
         void listEvaluationAppointments(familyId, controller.signal)
-            .then(setAppointments)
+            .then((items) => {
+                setAppointments(items);
+                if (targetAppointmentId && autoOpenedAppointment.current !== targetAppointmentId) {
+                    const target = items.find(
+                        (item) => String(item.appointmentId) === String(targetAppointmentId),
+                    );
+                    if (target) {
+                        autoOpenedAppointment.current = targetAppointmentId;
+                        setSelected(target);
+                        setRating(target.rating ?? 0);
+                        setComment(target.comment);
+                        setFormError(undefined);
+                    }
+                }
+            })
             .catch((failure: unknown) => {
                 if (failure instanceof Error && failure.name === "AbortError") return;
                 setError("Não foi possível carregar os atendimentos para avaliação.");
@@ -64,7 +80,7 @@ export default function AvaliacoesView() {
                 if (!controller.signal.aborted) setLoading(false);
             });
         return () => controller.abort();
-    }, [familyId, reloadKey]));
+    }, [familyId, reloadKey, targetAppointmentId]));
 
     const summary = useMemo(() => {
         const evaluated = appointments.filter((item) => item.rating);

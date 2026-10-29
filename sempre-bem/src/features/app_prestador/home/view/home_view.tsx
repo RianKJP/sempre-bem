@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CancelAttendanceModal } from "@/core/components/cancel_attendance_modal";
 import { useHomeViewModel } from "@/features/app_prestador/home/viewmodels/use_home_view_model";
 
 const COLORS = {
@@ -48,21 +49,36 @@ function formatCurrency(value: number) {
     }).format(value);
 }
 
+function formatElapsed(startTime: string | null, now: number) {
+    if (!startTime) return "00:00:00";
+    const totalSeconds = Math.max(0, Math.floor((now - Date.parse(startTime)) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
 export default function HomeView() {
     const {
         acceptCallError,
         acceptCurrentCall,
+        cancelCurrentAttendance,
         changeProfile,
         clearAcceptCallError,
         currentCall,
+        goToAttendanceRecords,
         isAvailable,
         isAcceptingCall,
+        isCancellingAttendance,
         isLoadingProvider,
+        isStartingAttendance,
         isUpdatingAvailability,
         isUpdatingHourlyRate,
         prestador,
         providerError,
         reloadProvider,
+        openCurrentCallRoute,
+        startCurrentAttendance,
         toggleAvailability,
         updateHourlyRate,
     } = useHomeViewModel();
@@ -70,7 +86,14 @@ export default function HomeView() {
     const [callDetailsModalVisible, setCallDetailsModalVisible] = useState(false);
     const [hourlyRateInput, setHourlyRateInput] = useState("");
     const [hourlyRateError, setHourlyRateError] = useState<string>();
+    const [cancelModalVisible, setCancelModalVisible] = useState(false);
+    const [cancelAttendanceError, setCancelAttendanceError] = useState<string>();
+    const [startCodeDigits, setStartCodeDigits] = useState(["", "", "", ""]);
+    const [startConfirmVisible, setStartConfirmVisible] = useState(false);
+    const [startAttendanceError, setStartAttendanceError] = useState<string>();
+    const [clockNow, setClockNow] = useState(Date.now());
     const requestPulse = useRef(new Animated.Value(0)).current;
+    const codeInputRefs = useRef<Array<TextInput | null>>([]);
     const firstName = prestador?.nome.split(" ")[0] ?? "Profissional";
     const initials = prestador
         ? prestador.nome
@@ -81,6 +104,9 @@ export default function HomeView() {
               .join("")
         : "--";
     const isAttending = currentCall?.status === "EM_ATENDIMENTO";
+    const isOnWay = currentCall?.status === "A_CAMINHO";
+    const isAwaitingClient = currentCall?.status === "AGUARDANDO_CLIENTE";
+    const isStartCodeComplete = startCodeDigits.every(Boolean);
     const requesterInitials = currentCall
         ? currentCall.requester
               .trim()
@@ -92,6 +118,63 @@ export default function HomeView() {
     const hourlyRateLabel = prestador?.valor_hora && prestador.valor_hora > 0
         ? new Intl.NumberFormat("pt-BR", { currency: "BRL", style: "currency" }).format(prestador.valor_hora)
         : "Não definido";
+    const requestCardScale = requestPulse.interpolate({
+        inputRange: [0, 0.5, 1],
+        outputRange: [1, 1.012, 1],
+    });
+    const pulseBorderOpacity = requestPulse.interpolate({
+        inputRange: [0, 0.18, 1],
+        outputRange: [0.7, 0.55, 0],
+    });
+    const pulseBorderScale = requestPulse.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 1.07],
+    });
+
+    function closeCancelModal() {
+        if (isCancellingAttendance) return;
+        setCancelModalVisible(false);
+        setCancelAttendanceError(undefined);
+    }
+
+    async function confirmAttendanceCancellation() {
+        setCancelAttendanceError(undefined);
+        const cancelled = await cancelCurrentAttendance();
+        if (cancelled) {
+            setCancelModalVisible(false);
+            return;
+        }
+        setCancelAttendanceError("Não foi possível cancelar. Verifique sua conexão e tente novamente.");
+    }
+
+    function changeStartCodeDigit(index: number, value: string) {
+        const digit = value.replace(/\D/g, "").slice(-1);
+        setStartAttendanceError(undefined);
+        setStartCodeDigits((current) => current.map((item, itemIndex) =>
+            itemIndex === index ? digit : item));
+        if (digit && index < 3) {
+            codeInputRefs.current[index + 1]?.focus();
+        }
+    }
+
+    function handleStartCodeKey(index: number, key: string) {
+        if (key !== "Backspace" || startCodeDigits[index] || index === 0) return;
+        setStartCodeDigits((current) => current.map((item, itemIndex) =>
+            itemIndex === index - 1 ? "" : item));
+        codeInputRefs.current[index - 1]?.focus();
+    }
+
+    async function confirmAttendanceStart() {
+        const started = await startCurrentAttendance(startCodeDigits.join(""));
+        if (started) {
+            setStartConfirmVisible(false);
+            setStartAttendanceError(undefined);
+            setStartCodeDigits(["", "", "", ""]);
+            return;
+        }
+        setStartConfirmVisible(false);
+        setStartAttendanceError("Código inválido ou não foi possível iniciar. Confira e tente novamente.");
+    }
 
     useEffect(() => {
         if (currentCall?.status !== "PENDENTE") {
@@ -119,6 +202,20 @@ export default function HomeView() {
         animation.start();
         return () => animation.stop();
     }, [currentCall?.id, currentCall?.status, requestPulse]);
+
+    useEffect(() => {
+        if (!isAttending) return;
+        setClockNow(Date.now());
+        const interval = setInterval(() => setClockNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, [currentCall?.appointmentId, isAttending]);
+
+    useEffect(() => {
+        if (isOnWay) return;
+        setStartCodeDigits(["", "", "", ""]);
+        setStartAttendanceError(undefined);
+        setStartConfirmVisible(false);
+    }, [currentCall?.appointmentId, isOnWay]);
 
     function openHourlyRateModal() {
         setHourlyRateInput(
@@ -225,13 +322,32 @@ export default function HomeView() {
                     </View>
                 ) : null}
 
-                <View style={styles.availabilityCard}>
+                <View style={[
+                    styles.availabilityCard,
+                    isAvailable && styles.availabilityCardOnline,
+                    !isAvailable && !isOnWay && !isAttending && styles.availabilityCardOffline,
+                    isOnWay && styles.availabilityCardOnWay,
+                    isAttending && styles.availabilityCardAttending,
+                ]}>
                     <View style={styles.availabilityCopy}>
                         <View style={styles.availabilityTitleRow}>
-                            <View style={styles.onlineDot} />
-                            <Text style={styles.availabilityTitle}>
+                            <View style={[
+                                styles.availabilityDot,
+                                isAvailable && styles.availabilityDotOnline,
+                                !isAvailable && !isOnWay && !isAttending && styles.availabilityDotOffline,
+                                isOnWay && styles.availabilityDotOnWay,
+                                isAttending && styles.availabilityDotAttending,
+                            ]} />
+                            <Text style={[
+                                styles.availabilityTitle,
+                                !isAvailable && !isOnWay && !isAttending && styles.availabilityTitleOffline,
+                                isOnWay && styles.availabilityTitleOnWay,
+                                isAttending && styles.availabilityTitleAttending,
+                            ]}>
                                 {isAttending
                                     ? "Em atendimento agora"
+                                    : isOnWay
+                                        ? "Atendimento confirmado"
                                     : isAvailable
                                         ? "Disponível agora"
                                         : "Indisponível"}
@@ -242,21 +358,39 @@ export default function HomeView() {
                                 ? "Atualizando disponibilidade..."
                                 : isAttending
                                     ? `Cuidando de ${currentCall.familyMember}`
+                                : isOnWay
+                                    ? `A caminho de ${currentCall.familyMember}`
                                 : isAvailable
                                     ? "Recebendo novas solicitações"
                                     : "Novas solicitações pausadas"}
                         </Text>
                     </View>
-                    <Pressable
-                        accessibilityLabel={isAvailable ? "Ficar indisponível" : "Ficar disponível"}
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: isAvailable }}
-                        disabled={!prestador || isLoadingProvider || isUpdatingAvailability || isAttending}
-                        onPress={toggleAvailability}
-                        style={[styles.switchTrack, !isAvailable && styles.switchTrackOff]}
-                    >
-                        <View style={[styles.switchThumb, !isAvailable && styles.switchThumbOff]} />
-                    </Pressable>
+                    {isAttending || isOnWay ? (
+                        <View style={[
+                            styles.busyStatusIcon,
+                            isOnWay && styles.busyStatusIconOnWay,
+                            isAttending && styles.busyStatusIconAttending,
+                        ]}>
+                            <SymbolView
+                                name={isAttending
+                                    ? { ios: "timer", android: "timer", web: "timer" }
+                                    : { ios: "location.fill", android: "location_on", web: "location_on" }}
+                                size={21}
+                                tintColor={isAttending ? "#A06A19" : COLORS.plum}
+                            />
+                        </View>
+                    ) : (
+                        <Pressable
+                            accessibilityLabel={isAvailable ? "Ficar indisponível" : "Ficar disponível"}
+                            accessibilityRole="switch"
+                            accessibilityState={{ checked: isAvailable }}
+                            disabled={!prestador || isLoadingProvider || isUpdatingAvailability}
+                            onPress={toggleAvailability}
+                            style={[styles.switchTrack, !isAvailable && styles.switchTrackOff]}
+                        >
+                            <View style={[styles.switchThumb, !isAvailable && styles.switchThumbOff]} />
+                        </Pressable>
+                    )}
                 </View>
 
                 <Pressable
@@ -282,15 +416,201 @@ export default function HomeView() {
 
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>
-                        {isAttending ? "Atendimento em andamento" : "Chamado atual"}
+                        {isAttending
+                            ? "Atendimento em andamento"
+                            : isAwaitingClient
+                                ? "Candidatura enviada"
+                                : "Chamado atual"}
                     </Text>
                     <Pressable accessibilityRole="button" hitSlop={8}>
                         <Text style={styles.sectionAction}>Ver todas</Text>
                     </Pressable>
                 </View>
 
-                {currentCall ? (
-                <View style={styles.requestCard}>
+                {currentCall ? (isOnWay ? (
+                    <View style={styles.onWayCard}>
+                        <View style={styles.onWayHeader}>
+                            <View style={styles.onWayIcon}>
+                                <SymbolView
+                                    name={{ ios: "location.fill", android: "location_on", web: "location_on" }}
+                                    size={22}
+                                    tintColor={COLORS.surface}
+                                />
+                            </View>
+                            <View style={styles.onWayHeaderCopy}>
+                                <Text style={styles.onWayEyebrow}>ATENDIMENTO CONTRATADO</Text>
+                                <Text style={styles.onWayTitle}>{currentCall.familyMember}</Text>
+                                <Text style={styles.onWayRequester}>Solicitado por {currentCall.requester}</Text>
+                            </View>
+                            <View style={styles.onWayStatusPill}>
+                                <Text style={styles.onWayStatusText}>A caminho</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.onWayAddressRow}>
+                            <SymbolView
+                                name={{ ios: "mappin.and.ellipse", android: "distance", web: "distance" }}
+                                size={18}
+                                tintColor={COLORS.plum}
+                            />
+                            <Text numberOfLines={2} style={styles.onWayAddress}>{currentCall.address}</Text>
+                        </View>
+
+                        <View style={styles.startCodeSection}>
+                            <Text style={styles.startCodeTitle}>Código de início</Text>
+                            <Text style={styles.startCodeDescription}>
+                                Peça ao cliente o código de quatro números para iniciar o atendimento.
+                            </Text>
+                            <View style={styles.startCodeRow}>
+                                {startCodeDigits.map((digit, index) => (
+                                    <TextInput
+                                        accessibilityLabel={`Dígito ${index + 1} do código de início`}
+                                        autoFocus={index === 0}
+                                        key={index}
+                                        keyboardType="number-pad"
+                                        maxLength={1}
+                                        onChangeText={(value) => changeStartCodeDigit(index, value)}
+                                        onKeyPress={({ nativeEvent }) => handleStartCodeKey(index, nativeEvent.key)}
+                                        ref={(input) => { codeInputRefs.current[index] = input; }}
+                                        selectTextOnFocus
+                                        style={[styles.startCodeInput, digit && styles.startCodeInputFilled]}
+                                        value={digit}
+                                    />
+                                ))}
+                            </View>
+                            {startAttendanceError ? (
+                                <Text style={styles.startAttendanceError}>{startAttendanceError}</Text>
+                            ) : null}
+                        </View>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            disabled={!isStartCodeComplete || isStartingAttendance}
+                            onPress={() => setStartConfirmVisible(true)}
+                            style={({ pressed }) => [
+                                styles.startAttendanceButton,
+                                (!isStartCodeComplete || isStartingAttendance) && styles.startAttendanceButtonDisabled,
+                                pressed && styles.detailsButtonPressed,
+                            ]}
+                        >
+                            {isStartingAttendance
+                                ? <ActivityIndicator color={COLORS.surface} size="small" />
+                                : <Text style={styles.startAttendanceButtonText}>Iniciar atendimento</Text>}
+                        </Pressable>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={openCurrentCallRoute}
+                            style={({ pressed }) => [styles.openMapButton, pressed && styles.detailsButtonPressed]}
+                        >
+                            <SymbolView
+                                name={{ ios: "map", android: "map", web: "map" }}
+                                size={18}
+                                tintColor={COLORS.plum}
+                            />
+                            <Text style={styles.openMapButtonText}>Ir para o mapa</Text>
+                        </Pressable>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            disabled={isCancellingAttendance}
+                            onPress={() => {
+                                setCancelAttendanceError(undefined);
+                                setCancelModalVisible(true);
+                            }}
+                            style={({ pressed }) => [styles.onWayCancelButton, pressed && styles.pressed]}
+                        >
+                            {isCancellingAttendance
+                                ? <ActivityIndicator color="#B85E61" size="small" />
+                                : <Text style={styles.cancelAttendanceText}>Cancelar atendimento</Text>}
+                        </Pressable>
+                    </View>
+                ) : isAttending ? (
+                    <View style={styles.ongoingCard}>
+                        <View style={styles.ongoingHeader}>
+                            <View style={styles.ongoingHeaderCopy}>
+                                <Text style={styles.ongoingEyebrow}>ATENDIMENTO EM ANDAMENTO</Text>
+                                <Text style={styles.ongoingTitle}>{currentCall.familyMember}</Text>
+                                <Text style={styles.ongoingPatientInfo}>
+                                    {currentCall.caredPersonAge ? `${currentCall.caredPersonAge} anos` : "Idade não informada"}
+                                    {currentCall.sex ? ` · ${currentCall.sex}` : ""}
+                                </Text>
+                            </View>
+                            <View style={styles.ongoingLivePill}>
+                                <View style={styles.ongoingLiveDot} />
+                                <Text style={styles.ongoingLiveText}>Em andamento</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.timerCard}>
+                            <Text style={styles.timerLabel}>TEMPO DECORRIDO</Text>
+                            <Text style={styles.timerValue}>{formatElapsed(currentCall.startTime, clockNow)}</Text>
+                            <Text style={styles.timerEnd}>
+                                Término previsto: {currentCall.endTime
+                                    ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(currentCall.endTime))
+                                    : "não informado"}
+                            </Text>
+                        </View>
+
+                        <View style={styles.ongoingSummaryRow}>
+                            <View style={styles.ongoingSummaryItem}>
+                                <Text style={styles.ongoingSummaryLabel}>DURAÇÃO</Text>
+                                <Text style={styles.ongoingSummaryValue}>{currentCall.duration}</Text>
+                            </View>
+                            <View style={styles.callMetaDivider} />
+                            <View style={styles.ongoingSummaryItem}>
+                                <Text style={styles.ongoingSummaryLabel}>SERVIÇOS</Text>
+                                <Text numberOfLines={2} style={styles.ongoingSummaryValue}>{currentCall.service}</Text>
+                            </View>
+                        </View>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={goToAttendanceRecords}
+                            style={({ pressed }) => [styles.recordButton, pressed && styles.detailsButtonPressed]}
+                        >
+                            <SymbolView
+                                name={{ ios: "square.and.pencil", android: "edit_note", web: "edit_note" }}
+                                size={20}
+                                tintColor={COLORS.surface}
+                            />
+                            <Text style={styles.recordButtonText}>Acompanhar atendimento</Text>
+                        </Pressable>
+
+                        <Pressable
+                            accessibilityRole="button"
+                            disabled={isCancellingAttendance}
+                            onPress={() => {
+                                setCancelAttendanceError(undefined);
+                                setCancelModalVisible(true);
+                            }}
+                            style={({ pressed }) => [styles.ongoingCancelButton, pressed && styles.pressed]}
+                        >
+                            {isCancellingAttendance
+                                ? <ActivityIndicator color="#B85E61" size="small" />
+                                : <Text style={styles.cancelAttendanceText}>Cancelar atendimento</Text>}
+                        </Pressable>
+                    </View>
+                ) : (
+                <View style={styles.requestCardWrapper}>
+                    {currentCall.status === "PENDENTE" ? (
+                        <Animated.View
+                            pointerEvents="none"
+                            style={[
+                                styles.requestPulseBorder,
+                                {
+                                    opacity: pulseBorderOpacity,
+                                    transform: [{ scale: pulseBorderScale }],
+                                },
+                            ]}
+                        />
+                    ) : null}
+                <Animated.View
+                    style={[
+                        styles.requestCard,
+                        currentCall.status === "PENDENTE" && { transform: [{ scale: requestCardScale }] },
+                    ]}
+                >
                     <View style={styles.requestHeader}>
                         <View style={styles.clientAvatar}>
                             <Text style={styles.clientInitials}>{requesterInitials}</Text>
@@ -302,9 +622,23 @@ export default function HomeView() {
                                 {currentCall.caredPersonAge ? `, ${currentCall.caredPersonAge} anos` : ""}
                             </Text>
                         </View>
-                        <View style={[styles.distancePill, isAttending && styles.attendingPill]}>
-                            <Text style={[styles.distanceText, isAttending && styles.attendingPillText]}>
-                                {isAttending ? "Em andamento" : "Novo"}
+                        <View style={[
+                            styles.distancePill,
+                            isAttending && styles.attendingPill,
+                            isAwaitingClient && styles.awaitingPill,
+                        ]}>
+                            <Text style={[
+                                styles.distanceText,
+                                isAttending && styles.attendingPillText,
+                                isAwaitingClient && styles.awaitingPillText,
+                            ]}>
+                                {isAttending
+                                    ? "Em andamento"
+                                    : isOnWay
+                                        ? "Contratado"
+                                        : isAwaitingClient
+                                            ? "Em análise"
+                                            : "Novo"}
                             </Text>
                         </View>
                     </View>
@@ -332,16 +666,36 @@ export default function HomeView() {
                     <Text style={styles.careDescription}>{currentCall.service}</Text>
                     <Text numberOfLines={2} style={styles.requestAddress}>{currentCall.address}</Text>
 
-                    <Pressable
-                        accessibilityRole="button"
-                        onPress={openCallDetailsModal}
-                        style={({ pressed }) => [styles.detailsButton, pressed && styles.detailsButtonPressed]}
-                    >
-                        <Text style={styles.detailsButtonText}>
-                            {isAttending ? "Ver detalhes do atendimento" : "Ver detalhes"}
-                        </Text>
-                    </Pressable>
+                    {isAwaitingClient ? (
+                        <View style={styles.awaitingChoiceCard}>
+                            <View style={styles.awaitingChoiceIcon}>
+                                <SymbolView
+                                    name={{ ios: "hourglass", android: "hourglass_top", web: "hourglass_top" }}
+                                    size={20}
+                                    tintColor={COLORS.plum}
+                                />
+                            </View>
+                            <View style={styles.awaitingChoiceCopy}>
+                                <Text style={styles.awaitingChoiceTitle}>O cliente está escolhendo o profissional</Text>
+                                <Text style={styles.awaitingChoiceDescription}>
+                                    Em breve você receberá o retorno se foi contratado para este atendimento.
+                                </Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={openCallDetailsModal}
+                            style={({ pressed }) => [styles.detailsButton, pressed && styles.detailsButtonPressed]}
+                        >
+                            <Text style={styles.detailsButtonText}>
+                                Ver detalhes
+                            </Text>
+                        </Pressable>
+                    )}
+                </Animated.View>
                 </View>
+                )
                 ) : (
                     <View style={styles.emptyCallCard}>
                         <SymbolView
@@ -362,6 +716,56 @@ export default function HomeView() {
                     <Text style={styles.nextAppointmentDescription}>José Santos · Fisioterapia assistida</Text>
                 </View>
             </ScrollView>
+
+            <CancelAttendanceModal
+                error={cancelAttendanceError}
+                isCancelling={isCancellingAttendance}
+                onClose={closeCancelModal}
+                onConfirm={() => void confirmAttendanceCancellation()}
+                visible={cancelModalVisible}
+            />
+
+            <Modal
+                animationType="fade"
+                onRequestClose={() => !isStartingAttendance && setStartConfirmVisible(false)}
+                statusBarTranslucent
+                transparent
+                visible={startConfirmVisible}
+            >
+                <View style={styles.startConfirmOverlay}>
+                    <View style={styles.startConfirmCard}>
+                        <View style={styles.startConfirmIcon}>
+                            <SymbolView
+                                name={{ ios: "play.fill", android: "play_arrow", web: "play_arrow" }}
+                                size={25}
+                                tintColor={COLORS.green}
+                            />
+                        </View>
+                        <Text style={styles.startConfirmTitle}>Iniciar atendimento?</Text>
+                        <Text style={styles.startConfirmDescription}>
+                            Confirme o código {startCodeDigits.join("")} para iniciar o cronômetro do atendimento de {currentCall?.familyMember}.
+                        </Text>
+                        <View style={styles.startConfirmActions}>
+                            <Pressable
+                                disabled={isStartingAttendance}
+                                onPress={() => setStartConfirmVisible(false)}
+                                style={styles.startConfirmBackButton}
+                            >
+                                <Text style={styles.startConfirmBackText}>Voltar</Text>
+                            </Pressable>
+                            <Pressable
+                                disabled={isStartingAttendance}
+                                onPress={() => void confirmAttendanceStart()}
+                                style={styles.startConfirmButton}
+                            >
+                                {isStartingAttendance
+                                    ? <ActivityIndicator color={COLORS.surface} size="small" />
+                                    : <Text style={styles.startConfirmButtonText}>Confirmar início</Text>}
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <Modal
                 animationType="fade"
@@ -537,51 +941,20 @@ export default function HomeView() {
                     behavior={Platform.OS === "ios" ? "padding" : undefined}
                     style={styles.rateModalOverlay}
                 >
-                    <Pressable
-                        accessibilityLabel="Fechar edição do valor da hora"
-                        disabled={isUpdatingHourlyRate}
-                        onPress={closeHourlyRateModal}
-                        style={StyleSheet.absoluteFill}
-                    />
+                    <Pressable accessibilityLabel="Fechar edição do valor da hora" disabled={isUpdatingHourlyRate} onPress={closeHourlyRateModal} style={StyleSheet.absoluteFill} />
                     <View accessibilityViewIsModal style={styles.rateModalCard}>
-                        <View style={styles.rateModalIcon}>
-                            <SymbolView name={{ ios: "banknote", android: "payments", web: "payments" }} size={27} tintColor={COLORS.plum} />
-                        </View>
+                        <View style={styles.rateModalIcon}><SymbolView name={{ ios: "banknote", android: "payments", web: "payments" }} size={27} tintColor={COLORS.plum} /></View>
                         <Text style={styles.rateModalTitle}>Valor da sua hora</Text>
-                        <Text style={styles.rateModalDescription}>
-                            Esse valor será exibido para os clientes enquanto você estiver online.
-                        </Text>
-
+                        <Text style={styles.rateModalDescription}>Esse valor será exibido para os clientes enquanto você estiver online.</Text>
                         <Text style={styles.rateInputLabel}>Valor por hora</Text>
                         <View style={[styles.rateInputContainer, hourlyRateError && styles.rateInputInvalid]}>
                             <Text style={styles.rateInputPrefix}>R$</Text>
-                            <TextInput
-                                accessibilityLabel="Valor por hora"
-                                autoFocus
-                                editable={!isUpdatingHourlyRate}
-                                keyboardType="numeric"
-                                onChangeText={(value) => {
-                                    setHourlyRateInput(formatHourlyRateInput(value));
-                                    setHourlyRateError(undefined);
-                                }}
-                                placeholder="0,00"
-                                placeholderTextColor="#AAA2A5"
-                                selectTextOnFocus
-                                style={styles.rateInput}
-                                value={hourlyRateInput}
-                            />
+                            <TextInput accessibilityLabel="Valor por hora" autoFocus editable={!isUpdatingHourlyRate} keyboardType="numeric" onChangeText={(value) => { setHourlyRateInput(formatHourlyRateInput(value)); setHourlyRateError(undefined); }} placeholder="0,00" placeholderTextColor="#AAA2A5" selectTextOnFocus style={styles.rateInput} value={hourlyRateInput} />
                         </View>
                         {hourlyRateError ? <Text accessibilityRole="alert" style={styles.rateError}>{hourlyRateError}</Text> : null}
-
                         <View style={styles.rateModalActions}>
-                            <Pressable disabled={isUpdatingHourlyRate} onPress={closeHourlyRateModal} style={styles.rateCancelButton}>
-                                <Text style={styles.rateCancelText}>Cancelar</Text>
-                            </Pressable>
-                            <Pressable disabled={isUpdatingHourlyRate} onPress={saveHourlyRate} style={styles.rateSaveButton}>
-                                {isUpdatingHourlyRate
-                                    ? <ActivityIndicator color={COLORS.surface} size="small" />
-                                    : <Text style={styles.rateSaveText}>Salvar valor</Text>}
-                            </Pressable>
+                            <Pressable disabled={isUpdatingHourlyRate} onPress={closeHourlyRateModal} style={styles.rateCancelButton}><Text style={styles.rateCancelText}>Cancelar</Text></Pressable>
+                            <Pressable disabled={isUpdatingHourlyRate} onPress={saveHourlyRate} style={styles.rateSaveButton}>{isUpdatingHourlyRate ? <ActivityIndicator color={COLORS.surface} size="small" /> : <Text style={styles.rateSaveText}>Salvar valor</Text>}</Pressable>
                         </View>
                     </View>
                 </KeyboardAvoidingView>
@@ -631,19 +1004,26 @@ const styles = StyleSheet.create({
     providerErrorText: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: "center" },
     retryButton: { minHeight: 36, alignItems: "center", justifyContent: "center", borderRadius: 9, backgroundColor: COLORS.plum, paddingHorizontal: 16 },
     retryButtonText: { color: COLORS.surface, fontSize: 11, fontWeight: "800" },
-    availabilityCard: { minHeight: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: COLORS.greenSoft, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, ...SHADOW },
+    availabilityCard: { minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14, ...SHADOW },
+    availabilityCardOnline: { borderColor: "#D7E1B8", backgroundColor: COLORS.greenSoft },
+    availabilityCardOffline: { borderColor: "#E9CACA", backgroundColor: "#F8ECEC" },
+    availabilityCardOnWay: { borderColor: "#DDC8D9", backgroundColor: COLORS.plumSoft },
+    availabilityCardAttending: { borderColor: "#EED8A6", backgroundColor: "#FFF3DA" },
     availabilityCopy: { flex: 1, minWidth: 0 },
     availabilityTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.green },
+    availabilityDot: { width: 8, height: 8, borderRadius: 4 },
+    availabilityDotOnline: { backgroundColor: COLORS.green },
+    availabilityDotOffline: { backgroundColor: "#B85E61" },
+    availabilityDotOnWay: { backgroundColor: COLORS.plum },
+    availabilityDotAttending: { backgroundColor: "#D18B24" },
     availabilityTitle: { color: COLORS.text, fontSize: 16, lineHeight: 21, fontWeight: "800" },
+    availabilityTitleOffline: { color: "#8F4A4D" },
+    availabilityTitleOnWay: { color: COLORS.plum },
+    availabilityTitleAttending: { color: "#875A18" },
     availabilitySubtitle: { color: COLORS.muted, fontSize: 11, lineHeight: 15, marginLeft: 16, marginTop: 3 },
-    hourlyRateButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.plum, backgroundColor: COLORS.plumSoft },
-    debugBadge: { borderRadius: 6, backgroundColor: COLORS.plum, paddingHorizontal: 6, paddingVertical: 4 },
-    debugBadgeText: { color: COLORS.surface, fontSize: 8, fontWeight: "900", letterSpacing: 0.4 },
-    hourlyRateCopy: { flex: 1, minWidth: 0 },
-    hourlyRateTitle: { color: COLORS.text, fontSize: 12, fontWeight: "800" },
-    hourlyRateDescription: { color: COLORS.muted, fontSize: 9, lineHeight: 13, marginTop: 2 },
-    hourlyRateValue: { color: COLORS.plum, fontSize: 13, fontWeight: "800" },
+    busyStatusIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, marginLeft: 12 },
+    busyStatusIconOnWay: { backgroundColor: COLORS.surface },
+    busyStatusIconAttending: { backgroundColor: "#FFF9EC" },
     switchTrack: { width: 46, height: 26, borderRadius: 13, justifyContent: "center", backgroundColor: COLORS.green, paddingHorizontal: 2 },
     switchTrackOff: { backgroundColor: "#C9C4C5" },
     switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.surface, alignSelf: "flex-end" },
@@ -656,6 +1036,32 @@ const styles = StyleSheet.create({
     metricLabel: { color: COLORS.muted, fontSize: 10, lineHeight: 14, marginTop: 4, textAlign: "center" },
     sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 28, marginBottom: 12 },
     sectionAction: { color: COLORS.plum, fontSize: 12, fontWeight: "700" },
+    onWayCard: { overflow: "hidden", borderRadius: 20, borderWidth: 1, borderColor: "#D9C9D6", backgroundColor: COLORS.surface, padding: 16, ...SHADOW },
+    onWayHeader: { flexDirection: "row", alignItems: "center" },
+    onWayIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: COLORS.plum },
+    onWayHeaderCopy: { flex: 1, minWidth: 0, marginLeft: 12 },
+    onWayEyebrow: { color: COLORS.green, fontSize: 8, fontWeight: "900", letterSpacing: 0.55 },
+    onWayTitle: { color: COLORS.text, fontSize: 17, lineHeight: 22, fontWeight: "900", marginTop: 2 },
+    onWayRequester: { color: COLORS.muted, fontSize: 10, marginTop: 2 },
+    onWayStatusPill: { alignSelf: "flex-start", borderRadius: 9, backgroundColor: COLORS.greenSoft, paddingHorizontal: 9, paddingVertical: 6 },
+    onWayStatusText: { color: COLORS.green, fontSize: 9, fontWeight: "900" },
+    onWayAddressRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderRadius: 13, backgroundColor: COLORS.background, marginTop: 14, paddingHorizontal: 12, paddingVertical: 11 },
+    onWayAddress: { flex: 1, color: COLORS.muted, fontSize: 10, lineHeight: 15 },
+    startCodeSection: { alignItems: "center", borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, marginTop: 13, paddingHorizontal: 14, paddingVertical: 15 },
+    startCodeTitle: { color: COLORS.text, fontSize: 14, fontWeight: "900" },
+    startCodeDescription: { maxWidth: 290, color: COLORS.muted, fontSize: 10, lineHeight: 15, textAlign: "center", marginTop: 4 },
+    startCodeRow: { width: "100%", flexDirection: "row", justifyContent: "center", gap: 10, marginTop: 13 },
+    startCodeInput: { width: 48, height: 54, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.background, color: COLORS.plum, fontSize: 23, fontWeight: "900", textAlign: "center", padding: 0 },
+    startCodeInputFilled: { borderColor: COLORS.plum, backgroundColor: COLORS.plumSoft },
+    startAttendanceError: { color: "#B85E61", fontSize: 10, lineHeight: 15, textAlign: "center", marginTop: 9 },
+    startAttendanceButton: { minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: COLORS.green, marginTop: 14 },
+    startAttendanceButtonDisabled: { opacity: 0.42 },
+    startAttendanceButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: "900" },
+    openMapButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 13, borderWidth: 1, borderColor: COLORS.plum, marginTop: 9 },
+    openMapButtonText: { color: COLORS.plum, fontSize: 13, fontWeight: "800" },
+    onWayCancelButton: { minHeight: 35, alignItems: "center", justifyContent: "center", marginTop: 4 },
+    requestCardWrapper: { position: "relative" },
+    requestPulseBorder: { position: "absolute", left: -2, right: -2, top: -2, bottom: -2, borderRadius: 18, borderWidth: 2, borderColor: COLORS.plum },
     requestCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 16, ...SHADOW },
     requestHeader: { flexDirection: "row", alignItems: "center" },
     clientAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "#32291E" },
@@ -669,6 +1075,8 @@ const styles = StyleSheet.create({
     distanceText: { color: "#9A7D18", fontSize: 11, fontWeight: "700" },
     attendingPill: { backgroundColor: COLORS.greenSoft },
     attendingPillText: { color: COLORS.green },
+    awaitingPill: { backgroundColor: COLORS.plumSoft },
+    awaitingPillText: { color: COLORS.plum },
     divider: { height: 1, backgroundColor: COLORS.border, marginTop: 14, marginBottom: 14 },
     scheduleRow: { flexDirection: "row", alignItems: "center", gap: 20 },
     scheduleItem: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -678,6 +1086,13 @@ const styles = StyleSheet.create({
     detailsButton: { height: 48, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.plum, borderRadius: 12, marginTop: 14 },
     detailsButtonPressed: { opacity: 0.86 },
     detailsButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: "800" },
+    awaitingChoiceCard: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 13, borderWidth: 1, borderColor: "#DDC8D9", backgroundColor: COLORS.plumSoft, marginTop: 14, paddingHorizontal: 12, paddingVertical: 11 },
+    awaitingChoiceIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: COLORS.surface },
+    awaitingChoiceCopy: { flex: 1, minWidth: 0 },
+    awaitingChoiceTitle: { color: COLORS.plum, fontSize: 12, lineHeight: 16, fontWeight: "800" },
+    awaitingChoiceDescription: { color: COLORS.muted, fontSize: 10, lineHeight: 14, marginTop: 3 },
+    cancelAttendanceButton: { minHeight: 38, alignItems: "center", justifyContent: "center", marginTop: 3 },
+    cancelAttendanceText: { color: "#B85E61", fontSize: 11, fontWeight: "800", textDecorationLine: "underline" },
     emptyCallCard: { minHeight: 150, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, ...SHADOW },
     emptyCallTitle: { color: COLORS.text, fontSize: 14, fontWeight: "800", marginTop: 10 },
     emptyCallDescription: { color: COLORS.muted, fontSize: 11, lineHeight: 16, marginTop: 4, textAlign: "center" },
@@ -728,6 +1143,43 @@ const styles = StyleSheet.create({
     acceptCallButton: { minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: COLORS.green },
     acceptCallButtonDisabled: { opacity: 0.65 },
     acceptCallButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: "900" },
+    startConfirmOverlay: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(46, 41, 44, 0.62)", padding: 20 },
+    startConfirmCard: { width: "100%", maxWidth: 380, alignItems: "center", borderRadius: 22, backgroundColor: COLORS.surface, padding: 22, ...SHADOW },
+    startConfirmIcon: { width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: 28, backgroundColor: COLORS.greenSoft },
+    startConfirmTitle: { color: COLORS.text, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 14 },
+    startConfirmDescription: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 7 },
+    startConfirmActions: { width: "100%", flexDirection: "row", gap: 9, marginTop: 20 },
+    startConfirmBackButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: COLORS.border },
+    startConfirmBackText: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
+    startConfirmButton: { flex: 1.4, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: COLORS.green },
+    startConfirmButtonText: { color: COLORS.surface, fontSize: 13, fontWeight: "900" },
+    ongoingCard: { overflow: "hidden", borderRadius: 20, borderWidth: 1, borderColor: "#D7E1B8", backgroundColor: COLORS.surface, padding: 17, ...SHADOW },
+    ongoingHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
+    ongoingHeaderCopy: { flex: 1, minWidth: 0, paddingRight: 10 },
+    ongoingEyebrow: { color: COLORS.green, fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
+    ongoingTitle: { color: COLORS.text, fontSize: 22, fontWeight: "900", marginTop: 4 },
+    ongoingPatientInfo: { color: COLORS.muted, fontSize: 11, marginTop: 4 },
+    ongoingLivePill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 9, backgroundColor: COLORS.greenSoft, paddingHorizontal: 8, paddingVertical: 6 },
+    ongoingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.green },
+    ongoingLiveText: { color: COLORS.green, fontSize: 8, fontWeight: "900" },
+    timerCard: { alignItems: "center", borderRadius: 18, backgroundColor: COLORS.plumSoft, marginTop: 18, paddingVertical: 18 },
+    timerLabel: { color: COLORS.plum, fontSize: 9, fontWeight: "900", letterSpacing: 0.7 },
+    timerValue: { color: COLORS.plum, fontSize: 34, fontWeight: "900", letterSpacing: 2, marginTop: 5 },
+    timerEnd: { color: COLORS.muted, fontSize: 10, marginTop: 5 },
+    ongoingSummaryRow: { minHeight: 68, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: COLORS.border, borderRadius: 14, marginTop: 12, paddingHorizontal: 13 },
+    ongoingSummaryItem: { flex: 1 },
+    ongoingSummaryLabel: { color: COLORS.muted, fontSize: 8, fontWeight: "900" },
+    ongoingSummaryValue: { color: COLORS.text, fontSize: 11, fontWeight: "800", marginTop: 4 },
+    recordButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 13, backgroundColor: COLORS.plum, marginTop: 14 },
+    recordButtonText: { color: COLORS.surface, fontSize: 14, fontWeight: "900" },
+    ongoingCancelButton: { minHeight: 36, alignItems: "center", justifyContent: "center", marginTop: 4 },
+    hourlyRateButton: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.plum, backgroundColor: COLORS.plumSoft },
+    debugBadge: { borderRadius: 6, backgroundColor: COLORS.plum, paddingHorizontal: 6, paddingVertical: 4 },
+    debugBadgeText: { color: COLORS.surface, fontSize: 8, fontWeight: "900", letterSpacing: 0.4 },
+    hourlyRateCopy: { flex: 1, minWidth: 0 },
+    hourlyRateTitle: { color: COLORS.text, fontSize: 12, fontWeight: "800" },
+    hourlyRateDescription: { color: COLORS.muted, fontSize: 9, lineHeight: 13, marginTop: 2 },
+    hourlyRateValue: { color: COLORS.plum, fontSize: 13, fontWeight: "800" },
     rateModalOverlay: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(46, 41, 44, 0.58)", padding: 20 },
     rateModalCard: { width: "100%", maxWidth: 380, borderRadius: 22, backgroundColor: COLORS.surface, padding: 22, ...SHADOW },
     rateModalIcon: { width: 56, height: 56, alignItems: "center", justifyContent: "center", alignSelf: "center", borderRadius: 28, backgroundColor: COLORS.plumSoft },

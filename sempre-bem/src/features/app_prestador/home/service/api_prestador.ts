@@ -22,10 +22,14 @@ export type PrestadorApi = {
 export type ChamadoAtualPrestador = {
     address: string;
     allergies: string | null;
+    appointmentId: string | null;
     caredPersonAge: number;
     dateLabel: string;
+    destinationLatitude: number | null;
+    destinationLongitude: number | null;
     duration: string;
     durationHours: number;
+    endTime: string | null;
     expectedEarnings: number;
     familyMember: string;
     healthConditions: string | null;
@@ -37,15 +41,21 @@ export type ChamadoAtualPrestador = {
     services: string[];
     sex: string | null;
     solicitationId: string;
-    status: "EM_ATENDIMENTO" | "PENDENTE";
+    startTime: string | null;
+    status: "A_CAMINHO" | "AGUARDANDO_CLIENTE" | "EM_ATENDIMENTO" | "PENDENTE";
 };
 
 type SolicitacaoApi = {
     cuidadores_aceitaram?: Array<{
         aceito_em: string;
+        atendimentos_concluidos: number;
         id_cuidador: string;
+        latitude: number | null;
+        longitude: number | null;
         nome: string;
+        nota_media: number | null;
         tipo_profissional: "CUIDADOR" | "ENFERMEIRO";
+        status_candidatura?: "CANDIDATO" | "CONTRATADO" | "NEGADO";
         valor_hora: number;
         valor_total: number;
     }>;
@@ -59,18 +69,33 @@ type SolicitacaoApi = {
     id_familia: string;
     id_idoso: string;
     id_solicitacao: string;
+    latitude_atendimento?: number | null;
+    longitude_atendimento?: number | null;
     servico?: string;
-    status: "ACEITA" | "CANCELADA" | "PENDENTE";
+    status: "ACEITA" | "CANCELADA" | "CONTRATADO" | "PENDENTE";
 };
 
 type AtendimentoApi = {
+    criado_em?: string;
+    id_cuidador?: string;
+    id_familia?: string;
+    id_idoso?: string;
+    codigo_inicio?: string;
     id?: string;
     id_atendimento: string;
     id_solicitacao: string;
-    criado_em?: string;
     data_hora_fim?: string | null;
     data_hora_inicio?: string | null;
-    status: "AGENDADO" | "CANCELADO" | "CONCLUIDO" | "EM_ANDAMENTO";
+    data_hora_prevista_fim?: string | null;
+    duracao_horas?: number;
+    latitude_atendimento?: number | null;
+    longitude_atendimento?: number | null;
+    status: "A_CAMINHO" | "CANCELADO_CLIENTE" | "CANCELADO_PRESTADOR" | "CONCLUIDO" | "EM_ANDAMENTO";
+};
+
+type AvaliacaoApi = {
+    id_atendimento: string;
+    nota: number;
 };
 
 type FamiliaApi = {
@@ -150,15 +175,35 @@ function encontrarChamadoAtual(
     familias: FamiliaApi[],
     idosos: IdosoApi[],
 ): ChamadoAtualPrestador | null {
-    const solicitacaoEmAndamento = solicitacoes.find(
-        (solicitacao) =>
-            solicitacao.id_cuidador === prestador.id_cuidador &&
-            atendimentos.some(
-                (atendimento) =>
-                    atendimento.id_solicitacao === solicitacao.id_solicitacao &&
-                    atendimento.status === "EM_ANDAMENTO",
-            ),
-    );
+    const atendimentoAtual = atendimentos
+        .filter((atendimento) =>
+            String(atendimento.id_cuidador) === String(prestador.id_cuidador) &&
+            (atendimento.status === "A_CAMINHO" || atendimento.status === "EM_ANDAMENTO"),
+        )
+        .sort((first, second) =>
+            Date.parse(second.criado_em ?? "") - Date.parse(first.criado_em ?? ""))[0];
+    const solicitacaoDoAtendimento = atendimentoAtual
+        ? solicitacoes.find((solicitacao) =>
+              String(solicitacao.id_solicitacao) === String(atendimentoAtual.id_solicitacao))
+        : undefined;
+
+    const solicitacaoEmAnalise = solicitacoes
+        .filter((solicitacao) => {
+            if (solicitacao.status !== "PENDENTE" && solicitacao.status !== "ACEITA") {
+                return false;
+            }
+
+            const candidatura = solicitacao.cuidadores_aceitaram?.find(
+                (aceite) => String(aceite.id_cuidador) === String(prestador.id_cuidador),
+            );
+
+            return Boolean(
+                candidatura &&
+                (!candidatura.status_candidatura || candidatura.status_candidatura === "CANDIDATO"),
+            );
+        })
+        .sort((first, second) =>
+            Date.parse(second.criado_em) - Date.parse(first.criado_em))[0];
 
     const solicitacaoPendente = prestador.status_disponibilidade === "DISPONIVEL"
         ? solicitacoes
@@ -175,7 +220,7 @@ function encontrarChamadoAtual(
                       new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime(),
               )[0]
         : undefined;
-    const solicitacao = solicitacaoEmAndamento ?? solicitacaoPendente;
+    const solicitacao = solicitacaoDoAtendimento ?? solicitacaoEmAnalise ?? solicitacaoPendente;
 
     if (!solicitacao) {
         return null;
@@ -194,12 +239,18 @@ function encontrarChamadoAtual(
     return {
         address: solicitacao.endereco_atendimento ?? "Endereço não informado",
         allergies: idoso?.alergias?.trim() || null,
+        appointmentId: atendimentoAtual
+            ? String(atendimentoAtual.id ?? atendimentoAtual.id_atendimento)
+            : null,
         caredPersonAge: idoso ? calcularIdade(idoso.data_nascimento, requestDate) : 0,
         dateLabel: formatarDataDoChamado(requestDate),
+        destinationLatitude: atendimentoAtual?.latitude_atendimento ?? solicitacao.latitude_atendimento ?? null,
+        destinationLongitude: atendimentoAtual?.longitude_atendimento ?? solicitacao.longitude_atendimento ?? null,
         duration: durationHours
             ? `${durationHours} ${durationHours === 1 ? "hora" : "horas"}`
             : "Duração não informada",
         durationHours,
+        endTime: atendimentoAtual?.data_hora_prevista_fim ?? null,
         expectedEarnings: durationHours * (prestador.valor_hora ?? 0),
         familyMember: idoso?.nome ?? "Familiar",
         healthConditions: idoso?.condicoes_saude?.trim() || null,
@@ -211,7 +262,14 @@ function encontrarChamadoAtual(
         services: service.split(",").map((item) => item.trim()).filter(Boolean),
         sex: idoso?.sexo?.trim() || null,
         solicitationId: solicitacao.id_solicitacao,
-        status: solicitacaoEmAndamento ? "EM_ATENDIMENTO" : "PENDENTE",
+        startTime: atendimentoAtual?.data_hora_inicio ?? null,
+        status: atendimentoAtual?.status === "EM_ANDAMENTO"
+            ? "EM_ATENDIMENTO"
+            : atendimentoAtual?.status === "A_CAMINHO"
+                ? "A_CAMINHO"
+                : solicitacaoEmAnalise?.id === solicitacao.id
+                    ? "AGUARDANDO_CLIENTE"
+                    : "PENDENTE",
     };
 }
 
@@ -270,6 +328,31 @@ export async function aceitarChamadoPrestador(
         throw new Error("Você já aceitou este chamado.");
     }
 
+    const [requests, appointments, evaluations] = await Promise.all([
+        buscarLista<SolicitacaoApi>(PROVIDER_API_ENDPOINTS.solicitacoes),
+        buscarLista<AtendimentoApi>(PROVIDER_API_ENDPOINTS.atendimentos),
+        buscarLista<AvaliacaoApi>(PROVIDER_API_ENDPOINTS.avaliacoes),
+    ]);
+    const providerRequestIds = new Set(
+        requests
+            .filter((request) => String(request.id_cuidador) === String(prestador.id_cuidador))
+            .map((request) => String(request.id_solicitacao)),
+    );
+    const completedAppointments = appointments.filter(
+        (appointment) =>
+            appointment.status === "CONCLUIDO" &&
+            providerRequestIds.has(String(appointment.id_solicitacao)),
+    );
+    const completedAppointmentIds = new Set(
+        completedAppointments.map((appointment) => String(appointment.id_atendimento || appointment.id)),
+    );
+    const providerRatings = evaluations
+        .filter((evaluation) => completedAppointmentIds.has(String(evaluation.id_atendimento)))
+        .map((evaluation) => Number(evaluation.nota))
+        .filter(Number.isFinite);
+    const averageRating = providerRatings.length
+        ? providerRatings.reduce((total, rating) => total + rating, 0) / providerRatings.length
+        : null;
     const acceptedAt = new Date().toISOString();
     const response = await fetch(PROVIDER_API_ENDPOINTS.solicitacao(chamado.id), {
         body: JSON.stringify({
@@ -277,9 +360,14 @@ export async function aceitarChamadoPrestador(
                 ...acceptedProviders,
                 {
                     aceito_em: acceptedAt,
+                    atendimentos_concluidos: completedAppointments.length,
                     id_cuidador: prestador.id_cuidador,
+                    latitude: prestador.latitude,
+                    longitude: prestador.longitude,
                     nome: prestador.nome,
+                    nota_media: averageRating,
                     tipo_profissional: prestador.tipo_profissional ?? "CUIDADOR",
+                    status_candidatura: "CANDIDATO",
                     valor_hora: prestador.valor_hora ?? 0,
                     valor_total: chamado.expectedEarnings,
                 },
@@ -314,6 +402,86 @@ export async function atualizarDisponibilidadePrestador(
     );
 
     return validarResposta<PrestadorApi>(response);
+}
+
+export async function iniciarAtendimentoPrestador(
+    atendimentoId: string,
+    codigoInformado: string,
+): Promise<void> {
+    const endpoint = PROVIDER_API_ENDPOINTS.atendimento(atendimentoId);
+    const currentResponse = await fetch(endpoint);
+    const atendimento = await validarResposta<AtendimentoApi>(currentResponse);
+
+    if (atendimento.status !== "A_CAMINHO") {
+        throw new Error("Este atendimento não está aguardando início.");
+    }
+    if (String(atendimento.codigo_inicio) !== codigoInformado.trim()) {
+        throw new Error("Código de início inválido.");
+    }
+
+    const inicio = new Date();
+    const fimPrevisto = new Date(
+        inicio.getTime() + (atendimento.duracao_horas ?? 0) * 60 * 60 * 1000,
+    );
+    const response = await fetch(endpoint, {
+        body: JSON.stringify({
+            data_hora_inicio: inicio.toISOString(),
+            data_hora_prevista_fim: fimPrevisto.toISOString(),
+            status: "EM_ANDAMENTO",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+    });
+    await validarResposta<AtendimentoApi>(response);
+}
+
+export async function cancelarAtendimentoPrestador(
+    chamado: ChamadoAtualPrestador,
+    prestador: PrestadorApi,
+): Promise<void> {
+    if (!chamado.appointmentId) throw new Error("Atendimento não encontrado.");
+    const endpoint = PROVIDER_API_ENDPOINTS.atendimento(chamado.appointmentId);
+    const currentResponse = await fetch(endpoint);
+    const atendimento = await validarResposta<AtendimentoApi>(currentResponse);
+    if (atendimento.status !== "A_CAMINHO" && atendimento.status !== "EM_ANDAMENTO") {
+        throw new Error("Este atendimento não pode mais ser cancelado.");
+    }
+
+    const agora = new Date().toISOString();
+    const [cancelResponse, pagamentos] = await Promise.all([
+        fetch(endpoint, {
+            body: JSON.stringify({
+                cancelado_em: agora,
+                cancelado_por: "PRESTADOR",
+                data_hora_fim: agora,
+                status: "CANCELADO_PRESTADOR",
+            }),
+            headers: { "Content-Type": "application/json" },
+            method: "PATCH",
+        }),
+        buscarLista<Record<string, unknown>>(PROVIDER_API_ENDPOINTS.pagamentos),
+    ]);
+    await validarResposta<AtendimentoApi>(cancelResponse);
+
+    const pagamento = pagamentos.find(
+        (item) => String(item.id_atendimento) === String(atendimento.id_atendimento),
+    );
+    if (pagamento) {
+        const pagamentoId = String(pagamento.id ?? pagamento.id_pagamento);
+        const response = await fetch(PROVIDER_API_ENDPOINTS.pagamento(pagamentoId), {
+            body: JSON.stringify({ data_reembolso: agora, status: "REEMBOLSADO" }),
+            headers: { "Content-Type": "application/json" },
+            method: "PATCH",
+        });
+        await validarResposta<Record<string, unknown>>(response);
+    }
+
+    const providerResponse = await fetch(PROVIDER_API_ENDPOINTS.prestador(prestador.id_cuidador), {
+        body: JSON.stringify({ status_disponibilidade: "DISPONIVEL" }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+    });
+    await validarResposta<PrestadorApi>(providerResponse);
 }
 
 export async function atualizarValorHoraPrestador(

@@ -22,12 +22,14 @@ type CuidadorApi = { id_cuidador: string; nome: string };
 type IdosoApi = { id_idoso: string; nome: string };
 
 type AvaliacaoApi = {
+    avaliado_em?: string | null;
     comentario?: string | null;
     criado_em?: string;
     id: string;
     id_atendimento: string;
     id_avaliacao?: string;
-    nota: number;
+    nota: number | null;
+    status?: "CONCLUIDA" | "PENDENTE";
 };
 
 export type EvaluationAppointment = {
@@ -88,8 +90,8 @@ export async function listEvaluationAppointments(
             caregiver: caregiver?.nome ?? "Profissional",
             comment: evaluation?.comentario ?? "",
             date: new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(dateValue)),
-            evaluationId: evaluation?.id,
-            rating: evaluation?.nota,
+            evaluationId: evaluation ? String(evaluation.id ?? evaluation.id_avaliacao) : undefined,
+            rating: typeof evaluation?.nota === "number" ? evaluation.nota : undefined,
             service: request.servico ?? "Atendimento domiciliar",
             timestamp,
         }];
@@ -106,10 +108,12 @@ export async function saveEvaluation(input: EvaluationInput): Promise<void> {
         : CLIENT_API_ENDPOINTS.avaliacoes;
     const response = await fetch(endpoint, {
         body: JSON.stringify({
+            avaliado_em: new Date().toISOString(),
             comentario: input.comment.trim() || null,
             ...(!input.evaluationId ? { criado_em: new Date().toISOString() } : {}),
             id_atendimento: input.appointmentId,
             nota: input.rating,
+            status: "CONCLUIDA",
         }),
         headers: { "Content-Type": "application/json" },
         method: input.evaluationId ? "PATCH" : "POST",

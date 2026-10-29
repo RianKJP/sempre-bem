@@ -6,6 +6,8 @@ import {
     atualizarDisponibilidadePrestador,
     atualizarValorHoraPrestador,
     buscarDadosHomePrestador,
+    cancelarAtendimentoPrestador,
+    iniciarAtendimentoPrestador,
     type ChamadoAtualPrestador,
     type PrestadorApi,
 } from "@/features/app_prestador/home/service/api_prestador";
@@ -20,6 +22,8 @@ export function useHomeViewModel() {
     const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
     const [isUpdatingHourlyRate, setIsUpdatingHourlyRate] = useState(false);
     const [isAcceptingCall, setIsAcceptingCall] = useState(false);
+    const [isCancellingAttendance, setIsCancellingAttendance] = useState(false);
+    const [isStartingAttendance, setIsStartingAttendance] = useState(false);
     const [acceptCallError, setAcceptCallError] = useState<string>();
     const [providerError, setProviderError] = useState<string>();
     const [reloadKey, setReloadKey] = useState(0);
@@ -30,7 +34,7 @@ export function useHomeViewModel() {
         setIsLoadingProvider(true);
         setProviderError(undefined);
 
-        buscarDadosHomePrestador(prestadorId, controller.signal)
+        const loadProvider = (showLoading: boolean) => buscarDadosHomePrestador(prestadorId, controller.signal)
             .then(({ chamadoAtual, prestador: loadedProvider }) => {
                 setCurrentCall(chamadoAtual);
                 setPrestador(loadedProvider);
@@ -45,12 +49,18 @@ export function useHomeViewModel() {
                 );
             })
             .finally(() => {
-                if (!controller.signal.aborted) {
+                if (showLoading && !controller.signal.aborted) {
                     setIsLoadingProvider(false);
                 }
             });
 
-        return () => controller.abort();
+        void loadProvider(true);
+        const interval = setInterval(() => void loadProvider(false), 3000);
+
+        return () => {
+            controller.abort();
+            clearInterval(interval);
+        };
     }, [prestadorId, reloadKey]);
 
     const isAvailable = prestador?.status_disponibilidade === "DISPONIVEL";
@@ -122,20 +132,64 @@ export function useHomeViewModel() {
         }
     }
 
+    async function cancelCurrentAttendance() {
+        if (!currentCall || !prestador || isCancellingAttendance) return false;
+        setIsCancellingAttendance(true);
+        setProviderError(undefined);
+        try {
+            await cancelarAtendimentoPrestador(currentCall, prestador);
+            setCurrentCall(null);
+            setPrestador((current) => current ? { ...current, status_disponibilidade: "DISPONIVEL" } : current);
+            return true;
+        } catch {
+            setProviderError("Não foi possível cancelar o atendimento.");
+            return false;
+        } finally {
+            setIsCancellingAttendance(false);
+        }
+    }
+
+    async function startCurrentAttendance(code: string) {
+        if (!currentCall?.appointmentId || currentCall.status !== "A_CAMINHO" || isStartingAttendance) {
+            return false;
+        }
+
+        setIsStartingAttendance(true);
+        setProviderError(undefined);
+        try {
+            await iniciarAtendimentoPrestador(currentCall.appointmentId, code);
+            setReloadKey((current) => current + 1);
+            return true;
+        } catch (error) {
+            setProviderError(
+                error instanceof Error ? error.message : "Não foi possível iniciar o atendimento.",
+            );
+            return false;
+        } finally {
+            setIsStartingAttendance(false);
+        }
+    }
+
     return {
         acceptCallError,
         acceptCurrentCall,
         changeProfile: () => router.replace("/"),
+        cancelCurrentAttendance,
         clearAcceptCallError: () => setAcceptCallError(undefined),
         currentCall,
+        goToAttendanceRecords: () => router.push({ pathname: "/atendimento-prestador", params: { prestadorId } }),
         isAvailable,
         isAcceptingCall,
+        isCancellingAttendance,
         isLoadingProvider,
+        isStartingAttendance,
         isUpdatingAvailability,
         isUpdatingHourlyRate,
         prestador,
         providerError,
         reloadProvider: () => setReloadKey((current) => current + 1),
+        openCurrentCallRoute: () => router.push({ pathname: "/prestador-rota", params: { prestadorId } }),
+        startCurrentAttendance,
         toggleAvailability,
         updateHourlyRate,
     };

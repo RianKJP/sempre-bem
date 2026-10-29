@@ -172,24 +172,6 @@ export default function DetalhesAtendimentoView() {
                     <DetailRow label="Endereço" value={appointment.address} last />
                 </View>
 
-                <Pressable
-                    accessibilityRole="button"
-                    style={({ pressed }) => [styles.rescheduleButton, pressed && styles.pressed]}
-                >
-                    <SymbolView
-                        name={{ ios: "calendar", android: "calendar_month", web: "calendar_month" }}
-                        size={20}
-                        tintColor={COLORS.plum}
-                    />
-                    <Text style={styles.rescheduleText}>Reagendar</Text>
-                </Pressable>
-
-                <Pressable
-                    accessibilityRole="button"
-                    style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
-                >
-                    <Text style={styles.cancelText}>Cancelar atendimento</Text>
-                </Pressable>
             </ScrollView>
         </SafeAreaView>
     );
@@ -279,10 +261,6 @@ const styles = StyleSheet.create({
     detailRowLast: { borderBottomWidth: 0 },
     detailLabel: { color: COLORS.muted, fontSize: 10 },
     detailValue: { flex: 1, color: COLORS.text, fontSize: 10, fontWeight: "800", textAlign: "right" },
-    rescheduleButton: { minHeight: 53, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, borderWidth: 1, borderColor: COLORS.plum, borderRadius: 13, marginTop: 21 },
-    rescheduleText: { color: COLORS.plum, fontSize: 16, fontWeight: "800" },
-    cancelButton: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: 8 },
-    cancelText: { color: COLORS.red, fontSize: 16, fontWeight: "700" },
     notFound: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
     notFoundTitle: { color: COLORS.text, fontSize: 18, fontWeight: "800" },
     notFoundDescription: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginTop: 8, maxWidth: 290, textAlign: "center" },

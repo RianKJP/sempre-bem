@@ -3,6 +3,7 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     BackHandler,
     KeyboardAvoidingView,
@@ -83,13 +84,18 @@ export default function SolicitacaoView() {
         familiar,
         goBack,
         hasCurrentLocation,
+        hiredProvider,
+        hireProvider,
+        hiringError,
         isCancelling,
         isCustomDurationVisible,
         isCustomServiceVisible,
         isLoadingCareRecipients,
+        isHiringProvider,
         isSearching,
         isSubmitting,
         clearCancelError,
+        clearHiringError,
         openCustomDuration,
         openCustomService,
         paymentMethod,
@@ -105,6 +111,7 @@ export default function SolicitacaoView() {
         submitRequest,
         submitError,
         startSearch,
+        startCode,
         toggleService,
     } = useSolicitacaoViewModel();
 
@@ -124,6 +131,10 @@ export default function SolicitacaoView() {
     const searchSheetTranslateY = useRef(new Animated.Value(offscreenDistance)).current;
     const [isCancelPopupVisible, setIsCancelPopupVisible] = useState(false);
     const [selectionPopup, setSelectionPopup] = useState<"careRecipient" | "payment">();
+    const [providerToHire, setProviderToHire] = useState<PrestadorAceiteApi>();
+    const [hireStage, setHireStage] = useState<"confirm" | "pix">("confirm");
+    const [pixKey, setPixKey] = useState("");
+    const [pixKeyCopied, setPixKeyCopied] = useState(false);
     const [searchTopBarHeight, setSearchTopBarHeight] = useState(58);
     const searchedProfessional = recommendation === "Enfermeiro" ? "enfermeiros" : "cuidadores";
     const paymentLabel = paymentMethod === "PIX"
@@ -133,11 +144,45 @@ export default function SolicitacaoView() {
             : "Selecionar forma de pagamento";
     const visibleAcceptedProviders = [...acceptedProviders]
         .sort((first, second) => Date.parse(second.aceito_em) - Date.parse(first.aceito_em))
-        .slice(0, isCompactHeight ? 2 : 3);
-    const acceptedCardHeight = 78;
+        .slice(0, 2);
+    const acceptedCardHeight = 126;
+    const hasAcceptedProvider = acceptedProviders.length > 0;
     const mapControlsTopOffset = isSearching
         ? insets.top + 12 + searchTopBarHeight + 14
         : 12;
+
+    function openHireModal(provider: PrestadorAceiteApi) {
+        clearHiringError();
+        setProviderToHire(provider);
+        setHireStage("confirm");
+        setPixKeyCopied(false);
+        setPixKey(`PIX-${provider.id_cuidador}-${Date.now().toString(36).toUpperCase()}`);
+    }
+
+    function closeHireModal() {
+        if (isHiringProvider) return;
+        setProviderToHire(undefined);
+        setHireStage("confirm");
+    }
+
+    async function finishHiring() {
+        if (!providerToHire) return;
+        const hired = await hireProvider(providerToHire);
+        if (hired) closeHireModal();
+    }
+
+    async function copyPixKey() {
+        try {
+            const Clipboard = await import("expo-clipboard");
+            await Clipboard.setStringAsync(pixKey);
+            setPixKeyCopied(true);
+        } catch {
+            Alert.alert(
+                "Chave Pix",
+                "O módulo de cópia ainda não está no aplicativo Android instalado. Mantenha pressionada a chave para selecioná-la ou recompile o app.",
+            );
+        }
+    }
 
     useEffect(() => {
         if (!isSearching) {
@@ -235,6 +280,9 @@ export default function SolicitacaoView() {
                     hasCurrentLocation={hasCurrentLocation}
                     latitude={coordinate.latitude}
                     longitude={coordinate.longitude}
+                    providerLatitude={hiredProvider?.latitude}
+                    providerLongitude={hiredProvider?.longitude}
+                    showProviderRoute={Boolean(hiredProvider)}
                 />
             </View>
 
@@ -543,8 +591,8 @@ export default function SolicitacaoView() {
                         ]}
                     >
                         <Pressable
-                            accessibilityLabel="Voltar para a solicitação"
-                            onPress={openCancelPopup}
+                            accessibilityLabel={hiredProvider ? "Voltar ao início" : "Voltar para a solicitação"}
+                            onPress={hiredProvider ? returnToClientHomeForDebug : openCancelPopup}
                             style={({ pressed }) => [styles.searchBackButton, pressed && styles.pressed]}
                         >
                             <SymbolView
@@ -569,7 +617,7 @@ export default function SolicitacaoView() {
                         </View>
                     </View>
 
-                    {visibleAcceptedProviders.length ? (
+                    {!hiredProvider && visibleAcceptedProviders.length ? (
                         <View
                             pointerEvents="box-none"
                             style={[
@@ -578,7 +626,7 @@ export default function SolicitacaoView() {
                                     height: visibleAcceptedProviders.length * acceptedCardHeight,
                                     top: Math.max(
                                         insets.top + searchTopBarHeight + 70,
-                                        viewportHeight * 0.3,
+                                        viewportHeight * 0.22,
                                     ),
                                 },
                             ]}
@@ -588,6 +636,7 @@ export default function SolicitacaoView() {
                                     duration={duration}
                                     index={index}
                                     key={provider.id_cuidador}
+                                    onHire={() => openHireModal(provider)}
                                     provider={provider}
                                     viewportWidth={viewportWidth}
                                 />
@@ -617,35 +666,111 @@ export default function SolicitacaoView() {
                         ]}
                     >
                         <View style={styles.handle} />
-                        <View style={[styles.searchingIcon, isCompactHeight && styles.searchingIconCompact]}>
-                            <ActivityIndicator color={COLORS.white} size="large" />
-                        </View>
-                        <Text style={[styles.searchingTitle, isCompactHeight && styles.searchingTitleCompact]}>
-                            Buscando {searchedProfessional}
+                        {hiredProvider ? (
+                            <View style={styles.trackingPanel}>
+                                <View style={styles.trackingStatusRow}>
+                                    <View style={styles.trackingPulse} />
+                                    <Text style={styles.trackingEyebrow}>PROFISSIONAL A CAMINHO</Text>
+                                </View>
+                                <View style={styles.trackingProviderCard}>
+                                    <View style={styles.trackingAvatar}>
+                                        <Text style={styles.trackingAvatarText}>{getInitials(hiredProvider.nome)}</Text>
+                                    </View>
+                                    <View style={styles.trackingProviderCopy}>
+                                        <Text numberOfLines={1} style={styles.trackingTitle}>{hiredProvider.nome}</Text>
+                                        <Text style={styles.trackingProviderMeta}>
+                                            {hiredProvider.tipo_profissional === "ENFERMEIRO" ? "Enfermeiro" : "Cuidador"}
+                                            {"  •  "}
+                                            <Text style={styles.trackingRating}>★ {(hiredProvider.nota_media ?? 0).toFixed(1)}</Text>
+                                        </Text>
+                                    </View>
+                                    <View style={styles.trackingPrice}>
+                                        <Text style={styles.trackingPriceLabel}>VALOR</Text>
+                                        <Text style={styles.trackingPriceValue}>{formatMoney(hiredProvider.valor_total)}</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.trackingRouteRow}>
+                                    <View style={styles.trackingRouteIcon}>
+                                        <SymbolView name={{ ios: "map.fill", android: "map", web: "map" }} size={17} tintColor={COLORS.primary} />
+                                    </View>
+                                    <View style={styles.trackingRouteCopy}>
+                                        <Text style={styles.trackingRouteTitle}>Rota até o local do atendimento</Text>
+                                        <Text style={styles.trackingRouteDescription}>O trajeto do profissional está marcado no mapa.</Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.trackingCodeCard}>
+                                    <View style={styles.trackingCodeCopy}>
+                                        <Text style={styles.startCodeLabel}>CÓDIGO DE INÍCIO</Text>
+                                        <Text style={styles.startCodeHint}>Informe somente quando o profissional chegar.</Text>
+                                    </View>
+                                    <View style={styles.startCodeRow}>
+                                        {(startCode ?? "----").split("").map((digit, index) => (
+                                            <View key={`${digit}-${index}`} style={styles.startCodeDigit}>
+                                                <Text style={styles.startCodeDigitText}>{digit}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    onPress={() => Alert.alert("Chat", "O chat com o profissional será aberto aqui.")}
+                                    style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
+                                >
+                                    <SymbolView name={{ ios: "message.fill", android: "chat", web: "chat" }} size={18} tintColor={COLORS.white} />
+                                    <Text style={styles.chatButtonText}>Conversar com o profissional</Text>
+                                </Pressable>
+                            </View>
+                        ) : (
+                        <>
+                        {!hasAcceptedProvider ? (
+                            <View style={[styles.searchingIcon, isCompactHeight && styles.searchingIconCompact]}>
+                                <ActivityIndicator color={COLORS.white} size="large" />
+                            </View>
+                        ) : (
+                            <SearchingProgressBar />
+                        )}
+                        <Text
+                            style={[
+                                styles.searchingTitle,
+                                isCompactHeight && styles.searchingTitleCompact,
+                                hasAcceptedProvider && styles.searchingTitleWithAcceptance,
+                            ]}
+                        >
+                            {hasAcceptedProvider ? "Buscando prestadores" : `Buscando ${searchedProfessional}`}
                         </Text>
                         <Text style={styles.searchingDescription}>
-                            Estamos enviando seu chamado aos profissionais próximos do endereço informado.
+                            {hasAcceptedProvider
+                                ? "Outros profissionais ainda podem aceitar enquanto você analisa as opções."
+                                : "Estamos enviando seu chamado aos profissionais próximos do endereço informado."}
                         </Text>
 
-                        <View style={[styles.searchSummary, isCompactHeight && styles.searchSummaryCompact]}>
-                            <View style={styles.searchSummaryItem}>
-                                <Text style={styles.searchSummaryLabel}>CUIDADO PARA</Text>
-                                <Text numberOfLines={1} style={styles.searchSummaryValue}>{familiar}</Text>
+                        {!hasAcceptedProvider ? (
+                            <>
+                            <View style={[styles.searchSummary, isCompactHeight && styles.searchSummaryCompact]}>
+                                <View style={styles.searchSummaryItem}>
+                                    <Text style={styles.searchSummaryLabel}>CUIDADO PARA</Text>
+                                    <Text numberOfLines={1} style={styles.searchSummaryValue}>{familiar}</Text>
+                                </View>
+                                <View style={styles.searchSummaryDivider} />
+                                <View style={styles.searchSummaryItem}>
+                                    <Text style={styles.searchSummaryLabel}>DURAÇÃO</Text>
+                                    <Text style={styles.searchSummaryValue}>{duration} horas</Text>
+                                </View>
                             </View>
-                            <View style={styles.searchSummaryDivider} />
-                            <View style={styles.searchSummaryItem}>
-                                <Text style={styles.searchSummaryLabel}>DURAÇÃO</Text>
-                                <Text style={styles.searchSummaryValue}>{duration} horas</Text>
-                            </View>
-                        </View>
 
-                        <Pressable
-                            accessibilityRole="button"
-                            onPress={openCancelPopup}
-                            style={({ pressed }) => [styles.cancelSearchButton, pressed && styles.pressed]}
-                        >
-                            <Text style={styles.cancelSearchText}>Cancelar busca</Text>
-                        </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                onPress={openCancelPopup}
+                                style={({ pressed }) => [styles.cancelSearchButton, pressed && styles.pressed]}
+                            >
+                                <Text style={styles.cancelSearchText}>Cancelar busca</Text>
+                            </Pressable>
+                            </>
+                        ) : null}
+                        </>
+                        )}
                     </Animated.View>
                 </>
             )}
@@ -681,6 +806,105 @@ export default function SolicitacaoView() {
                 title="Forma de pagamento"
                 visible={selectionPopup === "payment"}
             />
+
+            <Modal
+                animationType="fade"
+                onRequestClose={closeHireModal}
+                statusBarTranslucent
+                transparent
+                visible={Boolean(providerToHire)}
+            >
+                <View style={styles.hireModalOverlay}>
+                    <Pressable
+                        accessibilityLabel="Fechar contratação"
+                        disabled={isHiringProvider}
+                        onPress={closeHireModal}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    {providerToHire ? (
+                        <View accessibilityViewIsModal style={styles.hireModalCard}>
+                            <View style={styles.hireModalHeader}>
+                                <View style={styles.hireModalHeaderIcon}>
+                                    <SymbolView
+                                        name={{ ios: hireStage === "pix" ? "qrcode" : "person.crop.circle.badge.checkmark", android: hireStage === "pix" ? "qr_code" : "how_to_reg", web: hireStage === "pix" ? "qr_code" : "how_to_reg" }}
+                                        size={26}
+                                        tintColor={COLORS.primary}
+                                    />
+                                </View>
+                                <View style={styles.hireModalHeaderCopy}>
+                                    <Text style={styles.hireModalEyebrow}>{hireStage === "pix" ? "PAGAMENTO PIX" : "CONFIRMAR CONTRATAÇÃO"}</Text>
+                                    <Text style={styles.hireModalTitle}>{providerToHire.nome}</Text>
+                                </View>
+                                <Pressable accessibilityLabel="Fechar" disabled={isHiringProvider} onPress={closeHireModal} style={styles.hireModalClose}>
+                                    <SymbolView name={{ ios: "xmark", android: "close", web: "close" }} size={19} tintColor={COLORS.text} />
+                                </Pressable>
+                            </View>
+
+                            {hireStage === "confirm" ? (
+                                <>
+                                    <View style={styles.hireSummary}>
+                                        <View style={styles.hireSummaryItem}>
+                                            <Text style={styles.hireSummaryLabel}>VALOR DO ATENDIMENTO</Text>
+                                            <Text style={styles.hireSummaryValue}>{formatMoney(providerToHire.valor_total)}</Text>
+                                        </View>
+                                        <View style={styles.hireSummaryDivider} />
+                                        <View style={styles.hireSummaryItem}>
+                                            <Text style={styles.hireSummaryLabel}>FORMA DE PAGAMENTO</Text>
+                                            <Text style={styles.hireSummaryValue}>{paymentMethod === "PIX" ? "Pix" : "Dinheiro"}</Text>
+                                        </View>
+                                    </View>
+
+                                    {paymentMethod === "DINHEIRO" ? (
+                                        <View style={styles.cashWarning}>
+                                            <SymbolView name={{ ios: "exclamationmark.circle.fill", android: "info", web: "info" }} size={20} tintColor="#9A7D18" />
+                                            <Text style={styles.cashWarningText}>O pagamento em dinheiro deverá ser feito diretamente ao profissional ao final do serviço.</Text>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.hireModalDescription}>Na próxima etapa você poderá pagar usando o QR Code ou copiando a chave Pix.</Text>
+                                    )}
+
+                                    {hiringError ? <Text style={styles.hiringError}>{hiringError}</Text> : null}
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        disabled={isHiringProvider}
+                                        onPress={() => paymentMethod === "PIX" ? setHireStage("pix") : void finishHiring()}
+                                        style={({ pressed }) => [styles.confirmHireButton, pressed && styles.pressed]}
+                                    >
+                                        {isHiringProvider ? <ActivityIndicator color={COLORS.white} /> : (
+                                            <Text style={styles.confirmHireButtonText}>
+                                                {paymentMethod === "PIX" ? "Continuar para o Pix" : "Confirmar contratação"}
+                                            </Text>
+                                        )}
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.pixInstruction}>Escaneie o QR Code ou copie a chave abaixo.</Text>
+                                    <PixQrCode value={pixKey} />
+                                    <View style={styles.pixKeyContainer}>
+                                        <Text numberOfLines={1} selectable style={styles.pixKeyText}>{pixKey}</Text>
+                                        <Pressable accessibilityLabel="Copiar chave Pix" hitSlop={8} onPress={() => void copyPixKey()} style={styles.copyPixButton}>
+                                            <SymbolView name={{ ios: "doc.on.doc", android: "content_copy", web: "content_copy" }} size={19} tintColor={COLORS.primary} />
+                                        </Pressable>
+                                    </View>
+                                    {pixKeyCopied ? <Text style={styles.pixCopiedText}>Chave Pix copiada.</Text> : null}
+                                    {hiringError ? <Text style={styles.hiringError}>{hiringError}</Text> : null}
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        disabled={isHiringProvider}
+                                        onPress={() => void finishHiring()}
+                                        style={({ pressed }) => [styles.paymentConfirmedButton, pressed && styles.pressed]}
+                                    >
+                                        {isHiringProvider
+                                            ? <ActivityIndicator color={COLORS.primary} size="small" />
+                                            : <Text style={styles.paymentConfirmedText}>Pagamento confirmado</Text>}
+                                    </Pressable>
+                                </>
+                            )}
+                        </View>
+                    ) : null}
+                </View>
+            </Modal>
 
             <Modal
                 animationType="fade"
@@ -761,19 +985,66 @@ export default function SolicitacaoView() {
     );
 }
 
+function PixQrCode({ value }: { value: string }) {
+    const size = 15;
+    const cells = Array.from({ length: size * size }, (_, index) => {
+        const row = Math.floor(index / size);
+        const column = index % size;
+        const inFinder = (startRow: number, startColumn: number) =>
+            row >= startRow && row < startRow + 5 && column >= startColumn && column < startColumn + 5;
+        const finderCell = inFinder(0, 0) || inFinder(0, 10) || inFinder(10, 0);
+        const finderDark = finderCell && (
+            row % 5 === 0 || column % 5 === 0 || row % 5 === 4 || column % 5 === 4 ||
+            ((row % 5) >= 2 && (row % 5) <= 2 && (column % 5) >= 2 && (column % 5) <= 2)
+        );
+        const seed = value.charCodeAt(index % Math.max(value.length, 1)) || 7;
+        const dark = finderCell ? finderDark : ((row * 17 + column * 31 + seed) % 5 < 2);
+
+        return <View key={index} style={[styles.qrCell, dark && styles.qrCellDark]} />;
+    });
+
+    return <View accessibilityLabel="QR Code Pix demonstrativo" style={styles.qrCode}>{cells}</View>;
+}
+
+function SearchingProgressBar() {
+    const translateX = useRef(new Animated.Value(-64)).current;
+
+    useEffect(() => {
+        const animation = Animated.loop(
+            Animated.timing(translateX, {
+                duration: 1350,
+                easing: (value) => value,
+                toValue: 184,
+                useNativeDriver: true,
+            }),
+        );
+
+        animation.start();
+        return () => animation.stop();
+    }, [translateX]);
+
+    return (
+        <View accessibilityLabel="Busca por prestadores em andamento" style={styles.searchProgressTrack}>
+            <Animated.View style={[styles.searchProgressIndicator, { transform: [{ translateX }] }]} />
+        </View>
+    );
+}
+
 function AcceptedProviderCard({
     duration,
     index,
+    onHire,
     provider,
     viewportWidth,
 }: {
     duration: number;
     index: number;
+    onHire: () => void;
     provider: PrestadorAceiteApi;
     viewportWidth: number;
 }) {
     const translateX = useRef(new Animated.Value(viewportWidth + 40)).current;
-    const translateY = useRef(new Animated.Value(index * 78)).current;
+    const translateY = useRef(new Animated.Value(index * 126)).current;
     const initials = provider.nome
         .trim()
         .split(/\s+/)
@@ -797,7 +1068,7 @@ function AcceptedProviderCard({
             damping: 20,
             mass: 0.9,
             stiffness: 170,
-            toValue: index * 78,
+            toValue: index * 126,
             useNativeDriver: true,
         }).start();
     }, [index, translateY]);
@@ -809,19 +1080,40 @@ function AcceptedProviderCard({
                 { transform: [{ translateX }, { translateY }] },
             ]}
         >
-            <View style={styles.acceptedProviderAvatar}>
-                <Text style={styles.acceptedProviderInitials}>{initials}</Text>
+            <View style={styles.acceptedProviderTop}>
+                <View style={styles.acceptedProviderAvatar}>
+                    <Text style={styles.acceptedProviderInitials}>{initials}</Text>
+                </View>
+                <View style={styles.acceptedProviderCopy}>
+                    <Text style={styles.acceptedProviderEyebrow}>ACEITOU SEU CHAMADO</Text>
+                    <Text numberOfLines={1} style={styles.acceptedProviderName}>{provider.nome}</Text>
+                    <Text numberOfLines={1} style={styles.acceptedProviderMeta}>
+                        {role} · {formatMoney(provider.valor_hora)}/hora
+                    </Text>
+                </View>
+                <View style={styles.acceptedProviderPrice}>
+                    <Text style={styles.acceptedProviderPriceLabel}>{duration}H</Text>
+                    <Text style={styles.acceptedProviderPriceValue}>{formatMoney(provider.valor_total)}</Text>
+                </View>
             </View>
-            <View style={styles.acceptedProviderCopy}>
-                <Text style={styles.acceptedProviderEyebrow}>ACEITOU SEU CHAMADO</Text>
-                <Text numberOfLines={1} style={styles.acceptedProviderName}>{provider.nome}</Text>
-                <Text numberOfLines={1} style={styles.acceptedProviderMeta}>
-                    {role} · {formatMoney(provider.valor_hora)}/hora
-                </Text>
-            </View>
-            <View style={styles.acceptedProviderPrice}>
-                <Text style={styles.acceptedProviderPriceLabel}>{duration}H</Text>
-                <Text style={styles.acceptedProviderPriceValue}>{formatMoney(provider.valor_total)}</Text>
+            <View style={styles.acceptedProviderBottom}>
+                <View style={styles.providerStat}>
+                    <SymbolView name={{ ios: "star.fill", android: "star", web: "star" }} size={14} tintColor="#E9B92D" />
+                    <Text style={styles.providerStatValue}>{(provider.nota_media ?? 0).toFixed(1)}</Text>
+                    <Text style={styles.providerStatLabel}>nota</Text>
+                </View>
+                <View style={styles.providerStatDivider} />
+                <View style={styles.providerStat}>
+                    <Text style={styles.providerStatValue}>{provider.atendimentos_concluidos ?? 0}</Text>
+                    <Text style={styles.providerStatLabel}>chamados feitos</Text>
+                </View>
+                <Pressable
+                    accessibilityRole="button"
+                    onPress={onHire}
+                    style={({ pressed }) => [styles.hireProviderButton, pressed && styles.pressed]}
+                >
+                    <Text style={styles.hireProviderButtonText}>Contratar</Text>
+                </Pressable>
             </View>
         </Animated.View>
     );
@@ -833,6 +1125,15 @@ function formatMoney(value: number) {
         minimumFractionDigits: 2,
         style: "currency",
     }).format(value);
+}
+
+function getInitials(name: string) {
+    return name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("");
 }
 
 type FormFieldProps = TextInputProps & {
@@ -1162,7 +1463,8 @@ const styles = StyleSheet.create({
     searchAddressLabel: { color: COLORS.textMuted, fontSize: 9, fontWeight: "700", letterSpacing: 0.2 },
     searchAddressText: { color: COLORS.text, fontSize: 12, fontWeight: "800", lineHeight: 16, marginTop: 2 },
     acceptedProvidersOverlay: { position: "absolute", left: 16, right: 16, zIndex: 3 },
-    acceptedProviderCard: { position: "absolute", left: 0, right: 0, top: 0, minHeight: 70, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 17, borderWidth: 1, borderColor: COLORS.primaryBorderSoft, backgroundColor: COLORS.surface, paddingHorizontal: 11, paddingVertical: 9, elevation: 7, shadowColor: COLORS.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.17, shadowRadius: 8 },
+    acceptedProviderCard: { position: "absolute", left: 0, right: 0, top: 0, minHeight: 116, borderRadius: 19, borderWidth: 1, borderColor: COLORS.primaryBorderSoft, backgroundColor: COLORS.surface, paddingHorizontal: 12, paddingVertical: 10, elevation: 7, shadowColor: COLORS.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.17, shadowRadius: 8 },
+    acceptedProviderTop: { flexDirection: "row", alignItems: "center", gap: 10 },
     acceptedProviderAvatar: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: COLORS.primary },
     acceptedProviderInitials: { color: COLORS.white, fontSize: 13, fontWeight: "900" },
     acceptedProviderCopy: { flex: 1, minWidth: 0 },
@@ -1172,15 +1474,53 @@ const styles = StyleSheet.create({
     acceptedProviderPrice: { alignItems: "flex-end", borderRadius: 10, backgroundColor: COLORS.secondarySoft, paddingHorizontal: 8, paddingVertical: 7 },
     acceptedProviderPriceLabel: { color: COLORS.textMuted, fontSize: 7, fontWeight: "800" },
     acceptedProviderPriceValue: { color: COLORS.secondary, fontSize: 11, fontWeight: "900", marginTop: 2 },
+    acceptedProviderBottom: { flexDirection: "row", alignItems: "center", marginTop: 9, paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
+    providerStat: { flexDirection: "row", alignItems: "center", gap: 3 },
+    providerStatValue: { color: COLORS.text, fontSize: 11, fontWeight: "900" },
+    providerStatLabel: { color: COLORS.textMuted, fontSize: 8 },
+    providerStatDivider: { width: 1, height: 18, backgroundColor: COLORS.border, marginHorizontal: 8 },
+    hireProviderButton: { minHeight: 32, alignItems: "center", justifyContent: "center", borderRadius: 9, backgroundColor: COLORS.primary, marginLeft: "auto", paddingHorizontal: 13 },
+    hireProviderButtonText: { color: COLORS.white, fontSize: 10, fontWeight: "900" },
     moreAcceptedProviders: { position: "absolute", left: 8, right: 8, color: COLORS.text, fontSize: 9, fontWeight: "800", textAlign: "center", textShadowColor: COLORS.surface, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
     searchSheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: COLORS.background, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, paddingTop: 11, alignItems: "center", elevation: 8, shadowColor: COLORS.text, shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: -3 } },
     searchSheetCompactWidth: { paddingHorizontal: 14 },
     searchSheetCompactHeight: { paddingTop: 8 },
     searchingIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.primary, marginTop: 3 },
     searchingIconCompact: { width: 58, height: 58, borderRadius: 29, marginTop: 0 },
+    searchProgressTrack: { width: 184, height: 6, overflow: "hidden", borderRadius: 3, backgroundColor: COLORS.primarySoft, marginTop: 6 },
+    searchProgressIndicator: { width: 64, height: 6, borderRadius: 3, backgroundColor: COLORS.primary },
     searchingTitle: { color: COLORS.text, fontSize: 22, lineHeight: 28, fontWeight: "800", marginTop: 17, textAlign: "center" },
     searchingTitleCompact: { fontSize: 20, lineHeight: 25, marginTop: 11 },
+    searchingTitleWithAcceptance: { marginTop: 8 },
     searchingDescription: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, marginTop: 6, maxWidth: 320, textAlign: "center" },
+    trackingPanel: { width: "100%", maxWidth: 520, alignItems: "center", paddingTop: 4 },
+    trackingStatusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    trackingPulse: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.secondary },
+    trackingEyebrow: { color: COLORS.secondary, fontSize: 9, fontWeight: "900", letterSpacing: 0.55 },
+    trackingProviderCard: { width: "100%", minHeight: 68, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 17, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, marginTop: 10, paddingHorizontal: 11, paddingVertical: 9 },
+    trackingAvatar: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: COLORS.primary },
+    trackingAvatarText: { color: COLORS.white, fontSize: 13, fontWeight: "900" },
+    trackingProviderCopy: { flex: 1, minWidth: 0 },
+    trackingTitle: { color: COLORS.text, fontSize: 15, lineHeight: 20, fontWeight: "900" },
+    trackingProviderMeta: { color: COLORS.textMuted, fontSize: 10, lineHeight: 15, marginTop: 2 },
+    trackingRating: { color: "#A97B00", fontWeight: "900" },
+    trackingPrice: { alignItems: "flex-end", borderRadius: 10, backgroundColor: COLORS.secondarySoft, paddingHorizontal: 8, paddingVertical: 7 },
+    trackingPriceLabel: { color: COLORS.textMuted, fontSize: 7, fontWeight: "900", letterSpacing: 0.4 },
+    trackingPriceValue: { color: COLORS.secondary, fontSize: 11, fontWeight: "900", marginTop: 2 },
+    trackingRouteRow: { width: "100%", flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, paddingHorizontal: 4 },
+    trackingRouteIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: COLORS.primarySoft },
+    trackingRouteCopy: { flex: 1 },
+    trackingRouteTitle: { color: COLORS.text, fontSize: 11, fontWeight: "900" },
+    trackingRouteDescription: { color: COLORS.textMuted, fontSize: 9, lineHeight: 13, marginTop: 1 },
+    trackingCodeCard: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, borderRadius: 15, backgroundColor: COLORS.surfaceSubtle, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10 },
+    trackingCodeCopy: { flex: 1, minWidth: 0 },
+    startCodeLabel: { color: COLORS.primary, fontSize: 8, fontWeight: "900", letterSpacing: 0.5 },
+    startCodeHint: { color: COLORS.textMuted, fontSize: 8, lineHeight: 12, marginTop: 3 },
+    startCodeRow: { flexDirection: "row", gap: 4 },
+    startCodeDigit: { width: 29, height: 35, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: COLORS.primaryBorderSoft, backgroundColor: COLORS.surface },
+    startCodeDigitText: { color: COLORS.primary, fontSize: 17, fontWeight: "900" },
+    chatButton: { width: "100%", minHeight: 43, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 11, backgroundColor: COLORS.primary, marginTop: 10, paddingHorizontal: 20 },
+    chatButtonText: { color: COLORS.white, fontSize: 12, fontWeight: "900" },
     searchSummary: { width: "100%", maxWidth: 520, minHeight: 72, flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, marginTop: 18, paddingHorizontal: 14 },
     searchSummaryCompact: { minHeight: 64, marginTop: 12 },
     searchSummaryItem: { flex: 1 },
@@ -1221,5 +1561,34 @@ const styles = StyleSheet.create({
     choiceRadioSelected: { borderColor: COLORS.primary },
     choiceRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary },
     choiceEmpty: { color: COLORS.textMuted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 22, marginBottom: 8 },
+    hireModalOverlay: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(38, 35, 38, 0.62)", padding: 18 },
+    hireModalCard: { width: "100%", maxWidth: 410, borderRadius: 24, backgroundColor: COLORS.surface, padding: 20, elevation: 12, shadowColor: COLORS.text, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14 },
+    hireModalHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+    hireModalHeaderIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: COLORS.primarySoft },
+    hireModalHeaderCopy: { flex: 1, minWidth: 0 },
+    hireModalEyebrow: { color: COLORS.primary, fontSize: 8, fontWeight: "900", letterSpacing: 0.55 },
+    hireModalTitle: { color: COLORS.text, fontSize: 17, fontWeight: "900", marginTop: 3 },
+    hireModalClose: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: COLORS.surfaceSubtle },
+    hireSummary: { minHeight: 74, flexDirection: "row", alignItems: "center", borderRadius: 15, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, marginTop: 18, paddingHorizontal: 13 },
+    hireSummaryItem: { flex: 1 },
+    hireSummaryLabel: { color: COLORS.textMuted, fontSize: 7, fontWeight: "900", letterSpacing: 0.4 },
+    hireSummaryValue: { color: COLORS.text, fontSize: 14, fontWeight: "900", marginTop: 5 },
+    hireSummaryDivider: { width: 1, height: 38, backgroundColor: COLORS.border, marginHorizontal: 12 },
+    cashWarning: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderRadius: 13, backgroundColor: "#F7F0D3", marginTop: 13, padding: 12 },
+    cashWarningText: { flex: 1, color: "#806817", fontSize: 11, lineHeight: 16 },
+    hireModalDescription: { color: COLORS.textMuted, fontSize: 11, lineHeight: 17, marginTop: 13, textAlign: "center" },
+    hiringError: { color: COLORS.danger, fontSize: 10, lineHeight: 15, textAlign: "center", marginTop: 10 },
+    confirmHireButton: { minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: COLORS.primary, marginTop: 16 },
+    confirmHireButtonText: { color: COLORS.white, fontSize: 13, fontWeight: "900" },
+    pixInstruction: { color: COLORS.textMuted, fontSize: 11, textAlign: "center", marginTop: 16 },
+    qrCode: { width: 180, height: 180, flexDirection: "row", flexWrap: "wrap", alignSelf: "center", borderWidth: 10, borderColor: COLORS.white, backgroundColor: COLORS.white, marginTop: 13 },
+    qrCell: { width: 10.6667, height: 10.6667, backgroundColor: COLORS.white },
+    qrCellDark: { backgroundColor: COLORS.text },
+    pixKeyContainer: { minHeight: 50, flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background, marginTop: 13, paddingLeft: 12 },
+    pixKeyText: { flex: 1, color: COLORS.text, fontSize: 11 },
+    copyPixButton: { width: 46, height: 46, alignItems: "center", justifyContent: "center" },
+    pixCopiedText: { color: COLORS.secondary, fontSize: 10, fontWeight: "800", textAlign: "center", marginTop: 7 },
+    paymentConfirmedButton: { minHeight: 42, alignItems: "center", justifyContent: "center", marginTop: 12 },
+    paymentConfirmedText: { color: COLORS.primary, fontSize: 12, fontWeight: "900", textDecorationLine: "underline" },
     pressed: { opacity: 0.65 },
 });

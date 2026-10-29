@@ -10,6 +10,8 @@ import {
 } from "@/features/app_cliente/home/service/api_cliente";
 import {
     buscarSolicitacaoPendenteDaFamilia,
+    cancelarAtendimentoPeloCliente,
+    finalizarAtendimentoPeloCliente,
     type SolicitacaoAtendimentoApi,
 } from "@/features/app_cliente/solicitacao/service/api_solicitacao";
 
@@ -169,14 +171,19 @@ export function useHomeViewModel() {
     useFocusEffect(useCallback(() => {
         const controller = new AbortController();
 
-        buscarSolicitacaoPendenteDaFamilia(familiaId, controller.signal)
+        const loadActiveRequest = () => buscarSolicitacaoPendenteDaFamilia(familiaId, controller.signal)
             .then(setPendingRequest)
             .catch((error: unknown) => {
                 if (error instanceof Error && error.name === "AbortError") return;
-                setPendingRequest(null);
             });
 
-        return () => controller.abort();
+        void loadActiveRequest();
+        const interval = setInterval(() => void loadActiveRequest(), 3000);
+
+        return () => {
+            controller.abort();
+            clearInterval(interval);
+        };
     }, [familiaId]));
 
     const familiares = useMemo(
@@ -193,6 +200,7 @@ export function useHomeViewModel() {
         router.push({
             pathname: "/solicitacao",
             params: {
+                familiaId,
                 familiar: family.name,
                 idosoId: family.id,
             },
@@ -217,17 +225,55 @@ export function useHomeViewModel() {
         });
     }
 
+    async function cancelActiveAttendance() {
+        if (!pendingRequest?.atendimento_ativo) return false;
+        try {
+            await cancelarAtendimentoPeloCliente(pendingRequest.atendimento_ativo);
+            setPendingRequest(null);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async function finishActiveAttendance() {
+        if (!pendingRequest?.atendimento_ativo) return false;
+        try {
+            const result = await finalizarAtendimentoPeloCliente(pendingRequest.atendimento_ativo);
+            setPendingRequest(null);
+            router.push({
+                pathname: "/avaliacoes",
+                params: {
+                    atendimentoId: result.atendimentoId,
+                    familiaId,
+                },
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     return {
         changeProfile: () => router.replace("/"),
+        cancelActiveAttendance,
         closeFamilyPicker: () => setIsFamilyPickerVisible(false),
         familia,
         familiaId,
         familiares,
+        finishActiveAttendance,
         familyError,
         isFamilyPickerVisible,
         isLoadingFamily,
         isLoadingProfessionals,
         openClientProfile: () => router.push({ pathname: "/perfil", params: { familiaId } }),
+        openActiveDiary: () => router.push({
+            pathname: "/diario-bordo",
+            params: {
+                atendimentoId: pendingRequest?.atendimento_ativo?.id_atendimento,
+                familiaId,
+            },
+        }),
         openCaredPersonRegistration: () => {
             setIsFamilyPickerVisible(false);
             router.push({

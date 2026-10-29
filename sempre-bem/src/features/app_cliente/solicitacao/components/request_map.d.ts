@@ -5,6 +5,10 @@ export type RequestMapProps = {
     hasCurrentLocation: boolean;
     latitude: number;
     longitude: number;
+    providerLatitude?: number | null;
+    providerLongitude?: number | null;
+    routeDashed?: boolean;
+    showProviderRoute?: boolean;
 };
 
 export declare function RequestMap(props: RequestMapProps): ReactElement;

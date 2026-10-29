@@ -10,8 +10,10 @@ import {
     parseCustomDuration,
 } from "@/features/app_cliente/solicitacao/service/solicitacao_service";
 import {
+    buscarAtendimentoDaSolicitacao,
     buscarSolicitacao,
     cancelarSolicitacao,
+    contratarPrestador,
     criarSolicitacao,
     type PrestadorAceiteApi,
     type SolicitacaoAtendimentoApi,
@@ -42,8 +44,13 @@ async function resolveAcceptedProviders(
 
     return [{
         aceito_em: request.data_hora_resposta ?? request.data_hora_solicitada,
+        atendimentos_concluidos: 0,
         id_cuidador: provider.id_cuidador,
+        latitude: provider.latitude,
+        longitude: provider.longitude,
         nome: provider.nome,
+        nota_media: null,
+        status_candidatura: "CANDIDATO",
         tipo_profissional: provider.tipo_profissional ?? "CUIDADOR",
         valor_hora: hourlyRate,
         valor_total: request.duracao_horas * hourlyRate,
@@ -52,7 +59,7 @@ async function resolveAcceptedProviders(
 
 export function useSolicitacaoViewModel() {
     const router = useRouter();
-    const { familiar = "Familiar", familiaId = "1", idosoId, solicitacaoId } = useLocalSearchParams<{
+    const { familiar = "Familiar", familiaId, idosoId, solicitacaoId } = useLocalSearchParams<{
         familiar?: string;
         familiaId?: string;
         idosoId?: string;
@@ -80,7 +87,12 @@ export function useSolicitacaoViewModel() {
     const [customServiceError, setCustomServiceError] = useState<string>();
     const [isSearching, setIsSearching] = useState(false);
     const [activeRequestId, setActiveRequestId] = useState<string>();
+    const [activeRequest, setActiveRequest] = useState<SolicitacaoAtendimentoApi>();
     const [acceptedProviders, setAcceptedProviders] = useState<PrestadorAceiteApi[]>([]);
+    const [hiredProvider, setHiredProvider] = useState<PrestadorAceiteApi>();
+    const [startCode, setStartCode] = useState<string>();
+    const [isHiringProvider, setIsHiringProvider] = useState(false);
+    const [hiringError, setHiringError] = useState<string>();
     const [cancelError, setCancelError] = useState<string>();
     const [isCancelling, setIsCancelling] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,7 +111,7 @@ export function useSolicitacaoViewModel() {
 
         void buscarSolicitacao(String(solicitacaoId), controller.signal)
             .then(async (request) => {
-                if (request.status !== "PENDENTE" && request.status !== "ACEITA") {
+                if (request.status !== "PENDENTE" && request.status !== "ACEITA" && request.status !== "CONTRATADO") {
                     setSubmitError("Este chamado não está mais em busca de prestadores.");
                     return;
                 }
@@ -122,7 +134,16 @@ export function useSolicitacaoViewModel() {
 
                 addressWasEdited.current = true;
                 setActiveRequestId(request.id);
+                setActiveRequest(request);
                 setAcceptedProviders(await resolveAcceptedProviders(request, controller.signal));
+                setHiredProvider(request.prestador_contratado);
+                if (request.status === "CONTRATADO") {
+                    const atendimento = await buscarAtendimentoDaSolicitacao(
+                        request.id_solicitacao,
+                        controller.signal,
+                    );
+                    setStartCode(atendimento?.codigo_inicio);
+                }
                 setAddress(request.endereco_atendimento);
                 setDuration(request.duracao_horas);
                 setPaymentMethod(request.forma_pagamento);
@@ -152,7 +173,16 @@ export function useSolicitacaoViewModel() {
 
             try {
                 const request = await buscarSolicitacao(activeRequestId, controller.signal);
+                setActiveRequest(request);
                 setAcceptedProviders(await resolveAcceptedProviders(request, controller.signal));
+                if (request.prestador_contratado) {
+                    setHiredProvider(request.prestador_contratado);
+                    const atendimento = await buscarAtendimentoDaSolicitacao(
+                        request.id_solicitacao,
+                        controller.signal,
+                    );
+                    setStartCode(atendimento?.codigo_inicio);
+                }
             } catch (error) {
                 if (!(error instanceof Error && error.name === "AbortError")) {
                     setSubmitError("Não foi possível atualizar os prestadores que aceitaram.");
@@ -313,6 +343,11 @@ export function useSolicitacaoViewModel() {
     }
 
     async function submitRequest() {
+        if (!familiaId) {
+            setSubmitError("Não foi possível identificar o cliente. Volte ao início e tente novamente.");
+            return false;
+        }
+
         if (!selectedElderId) {
             setSubmitError("Cadastre ou selecione uma pessoa cuidada antes de iniciar a busca.");
             return false;
@@ -337,9 +372,12 @@ export function useSolicitacaoViewModel() {
                 formaPagamento: paymentMethod,
                 id_familia: String(familiaId),
                 id_idoso: selectedElderId,
+                latitudeAtendimento: hasCurrentLocation ? coordinate.latitude : null,
+                longitudeAtendimento: hasCurrentLocation ? coordinate.longitude : null,
                 servico: [...selectedServices, ...customServices].join(", "),
             });
             setActiveRequestId(createdRequest.id);
+            setActiveRequest(createdRequest);
             setAcceptedProviders(createdRequest.cuidadores_aceitaram ?? []);
 
             return true;
@@ -376,6 +414,29 @@ export function useSolicitacaoViewModel() {
         }
     }
 
+    async function hireProvider(provider: PrestadorAceiteApi) {
+        if (!activeRequest || !paymentMethod || isHiringProvider) return false;
+
+        setIsHiringProvider(true);
+        setHiringError(undefined);
+
+        try {
+            const result = await contratarPrestador({
+                formaPagamento: paymentMethod,
+                prestador: provider,
+                solicitacao: activeRequest,
+            });
+            setHiredProvider(provider);
+            setStartCode(result.codigoInicio);
+            return true;
+        } catch (error) {
+            setHiringError(error instanceof Error ? error.message : "Não foi possível contratar o profissional.");
+            return false;
+        } finally {
+            setIsHiringProvider(false);
+        }
+    }
+
     return {
         acceptedProviders,
         addCustomService,
@@ -407,13 +468,18 @@ export function useSolicitacaoViewModel() {
         familiaId: String(familiaId),
         goBack: () => router.back(),
         hasCurrentLocation,
+        hiredProvider,
+        hireProvider,
+        hiringError,
         isCancelling,
         isCustomDurationVisible,
         isCustomServiceVisible,
         isLoadingCareRecipients,
+        isHiringProvider,
         isSearching,
         isSubmitting,
         clearCancelError: () => setCancelError(undefined),
+        clearHiringError: () => setHiringError(undefined),
         openCustomDuration,
         openCustomService,
         paymentMethod,
@@ -432,6 +498,7 @@ export function useSolicitacaoViewModel() {
         },
         selectedElderId,
         selectedServiceIds,
+        startCode,
         submitRequest,
         submitError,
         startSearch: () => setIsSearching(true),

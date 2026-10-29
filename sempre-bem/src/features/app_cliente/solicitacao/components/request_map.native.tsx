@@ -1,5 +1,7 @@
 import {
     Camera,
+    GeoJSONSource,
+    Layer,
     type CameraRef,
     Map as MapLibreMap,
     type MapRef,
@@ -7,7 +9,7 @@ import {
     ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 type RequestMapProps = {
@@ -15,6 +17,10 @@ type RequestMapProps = {
     hasCurrentLocation: boolean;
     latitude: number;
     longitude: number;
+    providerLatitude?: number | null;
+    providerLongitude?: number | null;
+    routeDashed?: boolean;
+    showProviderRoute?: boolean;
 };
 
 const INITIAL_ZOOM = 15;
@@ -51,12 +57,21 @@ export function RequestMap({
     hasCurrentLocation,
     latitude,
     longitude,
+    providerLatitude,
+    providerLongitude,
+    routeDashed = false,
+    showProviderRoute = false,
 }: RequestMapProps) {
     const cameraRef = useRef<CameraRef>(null);
     const mapRef = useRef<MapRef>(null);
     const coordinate: [number, number] = hasCurrentLocation
         ? [longitude, latitude]
         : DEFAULT_COORDINATE;
+    const hasProviderLocation = showProviderRoute && providerLatitude != null && providerLongitude != null;
+    const providerCoordinate: [number, number] = hasProviderLocation
+        ? [providerLongitude, providerLatitude]
+        : [coordinate[0] + 0.012, coordinate[1] + 0.009];
+    const [routeCoordinates, setRouteCoordinates] = useState<Array<[number, number]>>([]);
 
     useEffect(() => {
         if (!hasCurrentLocation) {
@@ -69,6 +84,51 @@ export function RequestMap({
             duration: 500,
         });
     }, [hasCurrentLocation, latitude, longitude]);
+
+    useEffect(() => {
+        if (!showProviderRoute) {
+            setRouteCoordinates([]);
+            return;
+        }
+
+        const controller = new AbortController();
+        const fallbackRoute: Array<[number, number]> = [providerCoordinate, coordinate];
+        setRouteCoordinates(fallbackRoute);
+
+        const fitRoute = (route: Array<[number, number]>) => {
+            const longitudes = route.map((point) => point[0]);
+            const latitudes = route.map((point) => point[1]);
+            cameraRef.current?.fitBounds([
+                Math.min(...longitudes),
+                Math.min(...latitudes),
+                Math.max(...longitudes),
+                Math.max(...latitudes),
+            ], {
+                padding: { top: 80, right: 80, bottom: 260, left: 80 },
+                duration: 700,
+            });
+        };
+        fitRoute(fallbackRoute);
+
+        const routeUrl = `https://router.project-osrm.org/route/v1/driving/${providerCoordinate[0]},${providerCoordinate[1]};${coordinate[0]},${coordinate[1]}?overview=full&geometries=geojson`;
+        void fetch(routeUrl, { signal: controller.signal })
+            .then((response) => {
+                if (!response.ok) throw new Error(`Rota indisponível: ${response.status}`);
+                return response.json() as Promise<{ routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }> }>;
+            })
+            .then((data) => {
+                const streetRoute = data.routes?.[0]?.geometry?.coordinates;
+                if (!streetRoute?.length) return;
+                setRouteCoordinates(streetRoute);
+                fitRoute(streetRoute);
+            })
+            .catch((error: unknown) => {
+                if (error instanceof Error && error.name === "AbortError") return;
+                setRouteCoordinates(fallbackRoute);
+            });
+
+        return () => controller.abort();
+    }, [latitude, longitude, providerLatitude, providerLongitude, showProviderRoute]);
 
     const changeZoom = async (amount: number) => {
         const currentZoom = (await mapRef.current?.getZoom()) ?? INITIAL_ZOOM;
@@ -122,6 +182,42 @@ export function RequestMap({
                             <View style={styles.locationMarkerCenter} />
                         </View>
                     </ViewAnnotation>
+                ) : null}
+
+                {showProviderRoute ? (
+                    <>
+                        <GeoJSONSource
+                            id="provider-route"
+                            data={{
+                                type: "Feature",
+                                geometry: {
+                                    type: "LineString",
+                                    coordinates: routeCoordinates.length ? routeCoordinates : [providerCoordinate, coordinate],
+                                },
+                                properties: {},
+                            }}
+                        >
+                            <Layer
+                                id="provider-route-line"
+                                type="line"
+                                style={{
+                                    lineColor: "#713568",
+                                    lineWidth: 5,
+                                    lineOpacity: 0.82,
+                                    ...(routeDashed ? { lineDasharray: [2, 1] } : {}),
+                                }}
+                            />
+                        </GeoJSONSource>
+                        <ViewAnnotation anchor="bottom" id="provider-location" lngLat={providerCoordinate} title="Profissional">
+                            <View style={styles.providerMarker}>
+                                <SymbolView
+                                    name={{ ios: "car.fill", android: "directions_car", web: "directions_car" }}
+                                    size={20}
+                                    tintColor="#FFFFFF"
+                                />
+                            </View>
+                        </ViewAnnotation>
+                    </>
                 ) : null}
             </MapLibreMap>
 
@@ -240,6 +336,7 @@ const styles = StyleSheet.create({
         height: 18,
         width: 18,
     },
+    providerMarker: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, borderWidth: 3, borderColor: "#FFFFFF", backgroundColor: "#94AA32", elevation: 5 },
     attributionText: {
         backgroundColor: "rgba(255, 255, 255, 0.82)",
         bottom: 3,
